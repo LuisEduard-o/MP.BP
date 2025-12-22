@@ -1,7 +1,7 @@
 
-# shortner.py (psycopg 3)
+# shortner.py (psycopg 3 + UI completa restaurada)
 import http.server
-import socketserver
+from socketserver import ThreadingTCPServer
 import urllib.parse
 import os
 import time
@@ -61,35 +61,366 @@ def build_short_base(handler: http.server.BaseHTTPRequestHandler) -> str:
         return f"http://{host_hdr}"
     return f"http://{HOST}:{PORT}"
 
-# -------------------- HTML simples --------------------
-INDEX_HTML = """
+# -------------------- HTML UI completa --------------------
+INDEX_HTML = r"""
 <!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"/>
 <title>EncCurtador • Painel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <style>
-body{font-family:system-ui,Arial,sans-serif;max-width:980px;margin:40px auto;padding:0 16px;color:#222}
-h1{margin:0 0 8px} small{color:#666}
-input,textarea,select,button{font-size:16px;padding:8px;margin:6px 0;width:100%}
-code,pre{background:#f7f7f7;border:1px solid #eee;padding:8px;border-radius:6px}
-table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px}
-th{background:#fafafa;text-align:left}
-.actions a{margin-right:8px}
+:root{
+  --bg:#0f172a; --panel:#111827; --muted:#6b7280; --border:#1f2937;
+  --accent:#22c55e; --accent2:#3b82f6; --danger:#ef4444; --txt:#e5e7eb;
+}
+*{box-sizing:border-box}
+body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);margin:0}
+.container{max-width:1100px;margin:32px auto;padding:0 16px}
+h1{margin:0 0 12px;font-size:28px}
+small{color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin:16px 0}
+.panel h2{margin:0 0 12px;font-size:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+label{display:block;font-size:14px;color:#cbd5e1;margin:8px 0 4px}
+input,textarea,select,button{width:100%;font-size:15px;padding:10px;border-radius:8px;border:1px solid var(--border);background:#0b1020;color:var(--txt)}
+textarea{min-height:90px}
+button{cursor:pointer;border:0}
+.btn{background:var(--accent);color:#021308;font-weight:600}
+.btn.secondary{background:var(--accent2);color:#04121f}
+.btn.danger{background:var(--danger);color:#2b0b0b}
+.btn.muted{background:#1f2937;color:#cbd5e1}
+.row{display:flex;gap:10px;align-items:center}
+.flex-1{flex:1}
+code,pre{background:#0b1020;border:1px solid var(--border);padding:10px;border-radius:8px;color:#93c5fd;overflow:auto}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th,td{border:1px solid var(--border);padding:8px;text-align:left}
+th{background:#0b1020}
+.tag{display:inline-block;background:#0b3b20;color:#93f2ae;border:1px solid #135c35;padding:2px 8px;border-radius:999px;font-size:12px}
+.badge{display:inline-block;background:#0b223b;color:#8ec7ff;border:1px solid #114a7b;padding:2px 8px;border-radius:999px;font-size:12px}
+.copy{display:inline-flex;gap:8px;align-items:center;margin-top:8px}
+hr{border:0;border-top:1px solid var(--border);margin:16px 0}
+.footer{color:var(--muted);font-size:13px;text-align:center;margin:24px 0}
+a{color:#93c5fd}
+.hidden{display:none}
 </style>
 </head>
 <body>
-<h1>EncCurtador • Painel</h1>
-<p><small>Servidor simples. Use a API abaixo para criar/editar links.</small></p>
-<pre>
-POST /new        JSON: { "urls": ["https://..."], "weights": [1,2,...], "code": "slug/opcional" }
-POST /update     JSON: { "code": "atual", "new_code": "novo/opcional", "urls": [...], "weights": [...] }
-POST /delete     JSON: { "code": "slug" }
+<div class="container">
+  <h1>EncCurtador • Painel</h1>
+  <small>Crie links curtos, distribua entre múltiplos destinos (com pesos) e veja estatísticas.</small>
+
+  <!-- Criar link curto -->
+  <div class="panel">
+    <h2>Criar link curto</h2>
+    <div class="grid">
+      <div>
+        <label>Slug (opcional)</label>
+        <input id="new-code" placeholder="Ex.: PromocaoMercadoPago/Whats"/>
+        <small class="muted">Use letras, números e hífen por segmento (1–32), separados por '/'.</small>
+        <hr>
+        <label>Tipo de destino</label>
+        <div class="row">
+          <label class="row"><input type="radio" name="tipo" value="web" checked> <span>&nbsp;Web (URL)</span></label>
+          <label class="row"><input type="radio" name="tipo" value="wa"> <span>&nbsp;WhatsApp (wa.me)</span></label>
+        </div>
+        <div id="web-box">
+          <label>URLs (uma por linha)</label>
+          <textarea id="web-urls" placeholder="https://site.com&#10;https://outro.com"></textarea>
+          <label>Pesos (uma por linha na mesma ordem)</label>
+          <textarea id="web-weights" placeholder="Se vazio, peso = 1 para todos."></textarea>
+        </div>
+        <div id="wa-box" class="hidden">
+          <div class="row">
+            <div class="flex-1">
+              <label>DDI</label>
+              <input id="wa-ddi" value="55"/>
+            </div>
+            <div class="flex-1">
+              <label>Número (somente dígitos)</label>
+              <input id="wa-number" placeholder="41999998888"/>
+            </div>
+          </div>
+          <label>Mensagem</label>
+          <textarea id="wa-message" placeholder="Digite a mensagem que será enviada..."></textarea>
+          <label>Peso</label>
+          <input id="wa-weight" type="number" step="0.1" value="1"/>
+          <div class="row">
+            <button class="btn secondary" id="wa-add">Adicionar destino WhatsApp</button>
+            <button class="btn muted" id="wa-clear">Limpar lista</button>
+          </div>
+          <table id="wa-table" class="hidden">
+            <thead><tr><th>Destino (wa.me)</th><th>Peso</th><th>Ações</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <small class="muted">Adicione quantos números quiser. Cada um tem seu próprio peso.</small>
+        </div>
+        <hr>
+        <button class="btn" id="create-btn">Criar link curto</button>
+        <div id="create-result" class="hidden">
+          <div class="copy">
+            <code id="create-url"></code>
+            <button class="btn secondary" id="copy-btn">Copiar</button>
+            <a id="open-btn" class="badge" target="_blank">Abrir</a>
+          </div>
+          <small class="muted">Compartilhe este link com seus clientes.</small>
+        </div>
+      </div>
+
+      <!-- Ajuda / instruções -->
+      <div>
+        <pre>
+API:
+POST /new      { urls:[...], weights:[...], code?: 'slug/opcional' }
+POST /update   { code, new_code?, urls:[...], weights:[...] }
+POST /delete   { code }
 GET  /list
 GET  /get/{code}
 GET  /stats/{code}
-GET  /{code}     (redireciona)
-</pre>
+GET  /{code}   (redireciona)
+        </pre>
+        <div class="tag">Dica</div>
+        <small>Para WhatsApp, o destino é: <code>https://wa.me/DDINUMERO?text=MENSAGEM</code>. O painel monta isso para você.</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Links criados -->
+  <div class="panel">
+    <h2>Links criados</h2>
+    <div class="row">
+      <button class="btn secondary" id="refresh-list">Atualizar lista</button>
+      <button class="btn muted" id="clear-list">Limpar</button>
+    </div>
+    <pre id="list-box" class="hidden"></pre>
+  </div>
+
+  <!-- Editar link -->
+  <div class="panel">
+    <h2>Editar link</h2>
+    <div class="grid">
+      <div>
+        <label>Slug atual</label>
+        <input id="edit-code" placeholder="Ex.: G9 ou Promocao/Whats"/>
+        <label>Novo slug (opcional)</label>
+        <input id="edit-new-code" placeholder="Deixe em branco para manter."/>
+        <label>URLs (uma por linha)</label>
+        <textarea id="edit-urls" placeholder="https://wa.me/5541999998888?text=...&#10;https://site.com"></textarea>
+        <label>Pesos (uma por linha na mesma ordem das URLs)</label>
+        <textarea id="edit-weights" placeholder="Se vazio, peso = 1 para todos. Valores negativos viram 0."></textarea>
+        <div class="row">
+          <button class="btn secondary" id="edit-save">Salvar alterações</button>
+          <button class="btn muted" id="edit-cancel">Cancelar</button>
+        </div>
+      </div>
+      <div>
+        <div class="row">
+          <div class="flex-1">
+            <label>Excluir por slug</label>
+            <input id="del-code" placeholder="Ex.: G9"/>
+          </div>
+        </div>
+        <button class="btn danger" id="del-btn">Excluir</button>
+        <hr>
+        <label>Stats de um código</label>
+        <div class="row">
+          <input id="stats-code" class="flex-1" placeholder="Ex.: G9"/>
+          <button class="btn secondary" id="stats-btn">Ver stats</button>
+        </div>
+        <pre id="stats-box" class="hidden"></pre>
+        <hr>
+        <label>Get JSON de um código</label>
+        <div class="row">
+          <input id="get-code" class="flex-1" placeholder="Ex.: G9"/>
+          <button class="btn secondary" id="get-btn">Ver JSON</button>
+        </div>
+        <pre id="get-box" class="hidden"></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Servidor local. Para compartilhar publicamente, faça deploy (Render).  
+    Respostas de redirecionamento enviam <code>Cache-Control: no-store</code>.
+  </div>
+</div>
+
+<script>
+(function(){
+  const q = (sel)=>document.querySelector(sel);
+  const qa = (sel)=>Array.from(document.querySelectorAll(sel));
+  const show = (el)=>el.classList.remove('hidden');
+  const hide = (el)=>el.classList.add('hidden');
+
+  // Alterna caixas Web/WhatsApp
+  qa('input[name="tipo"]').forEach(r=>{
+    r.addEventListener('change', ()=>{
+      const isWeb = q('input[name="tipo"]:checked').value === 'web';
+      (isWeb?show:hide)(q('#web-box'));
+      (!isWeb?show:hide)(q('#wa-box'));
+    });
+  });
+
+  // Lista de destinos WhatsApp (em memória no navegador)
+  const waList = [];
+  function renderWaTable(){
+    const tbl = q('#wa-table');
+    const tbody = tbl.querySelector('tbody');
+    tbody.innerHTML = '';
+    if (waList.length === 0){ hide(tbl); return; }
+    show(tbl);
+    waList.forEach((item, idx)=>{
+      const tr = document.createElement('tr');
+      const url = `https://wa.me/${item.ddi}${item.number}?text=${encodeURIComponent(item.message)}`;
+      tr.innerHTML = `
+        <td><code>${url}</code></td>
+        <td>${item.weight}</td>
+        <td><button class="btn danger" data-idx="${idx}">Remover</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('button[data-idx]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const i = parseInt(btn.getAttribute('data-idx'));
+        waList.splice(i,1);
+        renderWaTable();
+      });
+    });
+  }
+  q('#wa-add').addEventListener('click', ()=>{
+    const ddi = q('#wa-ddi').value.trim();
+    const number = q('#wa-number').value.trim();
+    const message = q('#wa-message').value.trim();
+    let weight = parseFloat(q('#wa-weight').value || '1');
+    if (!ddi || !number || !message){ alert('Preencha DDI, número e mensagem.'); return; }
+    if (!/^\d+$/.test(ddi) || !/^\d+$/.test(number)){ alert('DDI e número devem conter apenas dígitos.'); return; }
+    if (!(weight>=0)){ weight = 1; }
+    waList.push({ddi, number, message, weight});
+    renderWaTable();
+  });
+  q('#wa-clear').addEventListener('click', ()=>{
+    waList.length = 0; renderWaTable();
+  });
+
+  // Criar link
+  q('#create-btn').addEventListener('click', async ()=>{
+    const code = q('#new-code').value.trim() || null;
+    const tipo = q('input[name="tipo"]:checked').value;
+    let urls = [], weights = [];
+    if (tipo === 'web'){
+      urls = q('#web-urls').value.split('\n').map(s=>s.trim()).filter(Boolean);
+      weights = q('#web-weights').value.split('\n').map(s=>s.trim()).filter(Boolean).map(parseFloat);
+      if (weights.length === 0) weights = Array(urls.length).fill(1.0);
+    } else {
+      if (waList.length === 0){ alert('Adicione ao menos um destino WhatsApp.'); return; }
+      urls = waList.map(item => `https://wa.me/${item.ddi}${item.number}?text=${encodeURIComponent(item.message)}`);
+      weights = waList.map(item => parseFloat(item.weight||1));
+    }
+    if (urls.length === 0){ alert('Informe ao menos uma URL.'); return; }
+    if (weights.length !== urls.length){ alert('Pesos devem ter o mesmo número de linhas das URLs.'); return; }
+
+    try{
+      const res = await fetch('/new', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ urls, weights, code })
+      });
+      const txt = await res.text();
+      if (!res.ok){ alert(txt); return; }
+      q('#create-url').textContent = txt;
+      q('#open-btn').href = txt;
+      show(q('#create-result'));
+    }catch(e){ alert('Erro ao criar link: '+e.message); }
+  });
+
+  // Copiar link
+  q('#copy-btn').addEventListener('click', async ()=>{
+    const v = q('#create-url').textContent;
+    try{ await navigator.clipboard.writeText(v); alert('Copiado!'); }
+    catch{ alert('Não foi possível copiar.'); }
+  });
+
+  // Lista
+  q('#refresh-list').addEventListener('click', async ()=>{
+    try{
+      const res = await fetch('/list');
+      const txt = await res.text();
+      q('#list-box').textContent = txt || 'Sem links ainda.';
+      show(q('#list-box'));
+    }catch(e){ alert('Erro ao listar: '+e.message); }
+  });
+  q('#clear-list').addEventListener('click', ()=>{
+    hide(q('#list-box')); q('#list-box').textContent='';
+  });
+
+  // Editar
+  q('#edit-save').addEventListener('click', async ()=>{
+    const code = q('#edit-code').value.trim();
+    const new_code = q('#edit-new-code').value.trim() || null;
+    let urls = q('#edit-urls').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    let weights = q('#edit-weights').value.split('\n').map(s=>s.trim()).filter(Boolean).map(parseFloat);
+    if (!code){ alert("Informe o slug atual."); return; }
+    if (urls.length === 0){ alert("Informe ao menos uma URL."); return; }
+    if (weights.length === 0) weights = Array(urls.length).fill(1.0);
+    if (weights.length !== urls.length){ alert("Pesos devem ter o mesmo número de linhas das URLs."); return; }
+    try{
+      const res = await fetch('/update', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code, new_code, urls, weights })
+      });
+      const txt = await res.text();
+      if (!res.ok){ alert(txt); return; }
+      alert('Atualizado! Novo link: ' + txt);
+    }catch(e){ alert('Erro ao atualizar: '+e.message); }
+  });
+  q('#edit-cancel').addEventListener('click', ()=>{
+    q('#edit-code').value=''; q('#edit-new-code').value='';
+    q('#edit-urls').value=''; q('#edit-weights').value='';
+  });
+
+  // Excluir
+  q('#del-btn').addEventListener('click', async ()=>{
+    const code = q('#del-code').value.trim();
+    if (!code){ alert('Informe o slug para excluir.'); return; }
+    if (!confirm(`Excluir '${code}'?`)) return;
+    try{
+      const res = await fetch('/delete', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code })
+      });
+      const txt = await res.text();
+      if (!res.ok){ alert(txt); return; }
+      alert(txt);
+    }catch(e){ alert('Erro ao excluir: '+e.message); }
+  });
+
+  // Stats
+  q('#stats-btn').addEventListener('click', async ()=>{
+    const code = q('#stats-code').value.trim();
+    if (!code){ alert('Informe o código.'); return; }
+    try{
+      const res = await fetch('/stats/' + encodeURIComponent(code));
+      const txt = await res.text();
+      q('#stats-box').textContent = txt;
+      show(q('#stats-box'));
+    }catch(e){ alert('Erro ao obter stats: '+e.message); }
+  });
+
+  // Get JSON
+  q('#get-btn').addEventListener('click', async ()=>{
+    const code = q('#get-code').value.trim();
+    if (!code){ alert('Informe o código.'); return; }
+    try{
+      const res = await fetch('/get/' + encodeURIComponent(code));
+      const txt = await res.text();
+      q('#get-box').textContent = txt;
+      show(q('#get-box'));
+    }catch(e){ alert('Erro ao obter JSON: '+e.message); }
+  });
+})();
+</script>
 </body>
 </html>
 """
@@ -98,7 +429,7 @@ GET  /{code}     (redireciona)
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL não definido nas variáveis de ambiente.")
 
-DB_POOL = ConnectionPool(conninfo=DATABASE_URL, min_size=1, max_size=10)
+DB_POOL = ConnectionPool(conninfo=DATABASE_URL, min_size=1, max_size=20)
 
 def ensure_schema():
     with DB_POOL.connection() as conn:
@@ -209,20 +540,11 @@ def create_short(urls, weights, custom_code=None):
 
             # inserir
             if len(urls) == 1:
-                cur.execute("""
-                    INSERT INTO urls(code, type, url)
-                    VALUES (%s,'single',%s);
-                """, (code, urls[0]))
+                cur.execute("INSERT INTO urls(code, type, url) VALUES (%s,'single',%s);", (code, urls[0]))
             else:
-                cur.execute("""
-                    INSERT INTO urls(code, type, url)
-                    VALUES (%s,'multi',NULL);
-                """, (code,))
+                cur.execute("INSERT INTO urls(code, type, url) VALUES (%s,'multi',NULL);", (code,))
                 for u, w in zip(urls, weights):
-                    cur.execute("""
-                        INSERT INTO targets(code, url, weight, hits)
-                        VALUES (%s,%s,%s,0);
-                    """, (code, u, float(w)))
+                    cur.execute("INSERT INTO targets(code, url, weight, hits) VALUES (%s,%s,%s,0);", (code, u, float(w)))
         conn.commit()
     return code
 
@@ -329,8 +651,7 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
             if not entry:
                 return self.respond_text("Código não encontrado.", status=404)
             raw = json.dumps({"code": code, **entry}, ensure_ascii=False, default=str)
-            self.send_json(raw)
-            return
+            return self.send_json(raw)
         if path.startswith("stats/"):
             code = path.split("/", 1)[1] if "/" in path else ""
             if not code:
@@ -491,6 +812,7 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
         data = html.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        # evitar cache da UI
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
@@ -501,7 +823,7 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
 # -------------------- Run --------------------
 def run():
     ensure_schema()
-    with socketserver.TCPServer((HOST, PORT), ShortenerHandler) as httpd:
+    with ThreadingTCPServer((HOST, PORT), ShortenerHandler) as httpd:
         print(f"Servidor rodando em http://{HOST}:{PORT}")
         httpd.serve_forever()
 
