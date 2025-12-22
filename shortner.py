@@ -1,17 +1,17 @@
 
-# shortner_postgres.py
+# shortner.py (psycopg 3)
 import http.server
 import socketserver
 import urllib.parse
 import os
 import time
-import threading
 import random
 import re
 import json
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from psycopg2 import pool
+
+import psycopg
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 # -------------------- Config --------------------
 HOST = "0.0.0.0"
@@ -58,7 +58,6 @@ def validate_slug_path(slug: str) -> bool:
 def build_short_base(handler: http.server.BaseHTTPRequestHandler) -> str:
     host_hdr = handler.headers.get("Host")
     if host_hdr:
-        # Render fornece host com HTTPS automaticamente (mas aqui é HTTP simples)
         return f"http://{host_hdr}"
     return f"http://{HOST}:{PORT}"
 
@@ -95,214 +94,200 @@ GET  /{code}     (redireciona)
 </html>
 """
 
-# -------------------- DB Pool & Schema --------------------
-DB_POOL = None
+# -------------------- DB Pool & Schema (psycopg 3) --------------------
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL não definido nas variáveis de ambiente.")
 
-def init_db_pool():
-    global DB_POOL
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL não definido nas variáveis de ambiente.")
-    # Cria um pool simples de conexões
-    DB_POOL = pool.SimpleConnectionPool(
-        minconn=1, maxconn=10, dsn=DATABASE_URL
-    )
+DB_POOL = ConnectionPool(conninfo=DATABASE_URL, min_size=1, max_size=10)
 
-def get_conn():
-    return DB_POOL.getconn()
+def ensure_schema():
+    with DB_POOL.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS urls (
+                  code        TEXT PRIMARY KEY,
+                  type        TEXT NOT NULL CHECK (type IN ('single','multi')),
+                  url         TEXT,
+                  created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  hits        BIGINT NOT NULL DEFAULT 0
+                );
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS targets (
+                  id     SERIAL PRIMARY KEY,
+                  code   TEXT NOT NULL REFERENCES urls(code) ON DELETE CASCADE,
+                  url    TEXT NOT NULL,
+                  weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+                  hits   BIGINT NOT NULL DEFAULT 0
+                );
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS counters (
+                  name   TEXT PRIMARY KEY,
+                  value  BIGINT NOT NULL
+                );
+            """)
+            cur.execute("""
+                INSERT INTO counters(name, value)
+                VALUES ('short_counter', 1000)
+                ON CONFLICT (name) DO NOTHING;
+            """)
+        conn.commit()
 
-def put_conn(conn):
-    DB_POOL.putconn(conn)
-
-def with_conn(fn):
-    """Decorator utilitário para abrir/fechar conexão."""
-    def _wrap(*args, **kwargs):
-        conn = get_conn()
-        try:
-            return fn(conn, *args, **kwargs)
-        finally:
-            put_conn(conn)
-    return _wrap
-
-@with_conn
-def ensure_schema(conn):
-    with conn.cursor() as cur:
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS urls (
-          code        TEXT PRIMARY KEY,
-          type        TEXT NOT NULL CHECK (type IN ('single','multi')),
-          url         TEXT,
-          created_at  TIMESTAMP WITH TIME ZONE NOT NULL,
-          hits        BIGINT NOT NULL DEFAULT 0
-        );
-        """)
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS targets (
-          id     SERIAL PRIMARY KEY,
-          code   TEXT NOT NULL REFERENCES urls(code) ON DELETE CASCADE,
-          url    TEXT NOT NULL,
-          weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-          hits   BIGINT NOT NULL DEFAULT 0
-        );
-        """)
-        # contador global (opcional)
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS counters (
-          name   TEXT PRIMARY KEY,
-          value  BIGINT NOT NULL
-        );
-        """)
-        # inicializa contador se não existir
-        cur.execute("INSERT INTO counters(name, value) VALUES ('short_counter', 1000) ON CONFLICT (name) DO NOTHING;")
-    conn.commit()
-
-@with_conn
-def next_code(conn) -> str:
-    with conn.cursor() as cur:
-        cur.execute("UPDATE counters SET value = value + 1 WHERE name = 'short_counter' RETURNING value;")
-        (val,) = cur.fetchone()
-    conn.commit()
+def next_code() -> str:
+    with DB_POOL.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE counters SET value = value + 1 WHERE name = 'short_counter' RETURNING value;")
+            val = cur.fetchone()[0]
+        conn.commit()
     return base62_encode(val)
 
-@with_conn
-def get_entry(conn, code: str):
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT * FROM urls WHERE code = %s;", (code,))
-        url_row = cur.fetchone()
-        if not url_row:
-            return None
-        if url_row["type"] == "single":
-            return {"type": "single", "url": url_row["url"], "hits": url_row["hits"], "created_at": url_row["created_at"]}
-        else:
-            cur.execute("SELECT id, url, weight, hits FROM targets WHERE code = %s ORDER BY id;", (code,))
-            targets = [dict(r) for r in cur.fetchall()]
-            return {"type": "multi", "targets": targets, "hits": url_row["hits"], "created_at": url_row["created_at"]}
-
-@with_conn
-def list_all(conn):
-    out = []
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT * FROM urls ORDER BY created_at DESC;")
-        for u in cur.fetchall():
-            if u["type"] == "single":
-                out.append({"code": u["code"], "type": "single", "url": u["url"], "hits": u["hits"]})
+def get_entry(code: str):
+    with DB_POOL.connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute("SELECT * FROM urls WHERE code = %s;", (code,))
+            url_row = cur.fetchone()
+            if not url_row:
+                return None
+            if url_row["type"] == "single":
+                return {
+                    "type": "single",
+                    "url": url_row["url"],
+                    "hits": url_row["hits"],
+                    "created_at": url_row["created_at"]
+                }
             else:
-                cur.execute("SELECT url, weight, hits FROM targets WHERE code = %s ORDER BY id;", (u["code"],))
-                ts = [dict(r) for r in cur.fetchall()]
-                out.append({"code": u["code"], "type": "multi", "targets": ts, "hits": u["hits"]})
+                cur.execute("SELECT id, url, weight, hits FROM targets WHERE code = %s ORDER BY id;", (code,))
+                targets = cur.fetchall()
+                return {
+                    "type": "multi",
+                    "targets": targets,
+                    "hits": url_row["hits"],
+                    "created_at": url_row["created_at"]
+                }
+
+def list_all():
+    out = []
+    with DB_POOL.connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute("SELECT * FROM urls ORDER BY created_at DESC;")
+            for u in cur.fetchall():
+                if u["type"] == "single":
+                    out.append({"code": u["code"], "type": "single", "url": u["url"], "hits": u["hits"]})
+                else:
+                    cur.execute("SELECT url, weight, hits FROM targets WHERE code = %s ORDER BY id;", (u["code"],))
+                    ts = cur.fetchall()
+                    out.append({"code": u["code"], "type": "multi", "targets": ts, "hits": u["hits"]})
     return out
 
-@with_conn
-def create_short(conn, urls, weights, custom_code=None):
-    # reaproveita slug se mesma config já existir
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT code, type, url, hits FROM urls;")
-        existing = cur.fetchall()
-        for e in existing:
-            code = e["code"]
-            if e["type"] == "single" and len(urls) == 1:
-                if e["url"] == urls[0]:
+def create_short(urls, weights, custom_code=None):
+    with DB_POOL.connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            # reaproveitar se mesma configuração já existe
+            cur.execute("SELECT code, type, url, hits FROM urls;")
+            existing = cur.fetchall()
+            for e in existing:
+                code = e["code"]
+                if e["type"] == "single" and len(urls) == 1 and e["url"] == urls[0]:
                     return code
-            elif e["type"] == "multi":
-                cur.execute("SELECT url, weight FROM targets WHERE code=%s ORDER BY id;", (code,))
-                ex_targets = cur.fetchall()
-                ex_urls = [t["url"] for t in ex_targets]
-                ex_weights = [float(t["weight"]) for t in ex_targets]
-                if ex_urls == urls and ex_weights == weights:
-                    return code
+                elif e["type"] == "multi":
+                    cur.execute("SELECT url, weight FROM targets WHERE code=%s ORDER BY id;", (code,))
+                    ex_targets = cur.fetchall()
+                    ex_urls = [t["url"] for t in ex_targets]
+                    ex_weights = [float(t["weight"]) for t in ex_targets]
+                    if ex_urls == urls and ex_weights == weights:
+                        return code
 
-        # gerar código
-        if custom_code:
-            # verificar colisão
-            cur.execute("SELECT 1 FROM urls WHERE code = %s;", (custom_code,))
-            if cur.fetchone():
-                raise ValueError("Erro: slug já está em uso.")
-            code = custom_code
-        else:
-            code = next_code(conn)
+            # gerar código
+            if custom_code:
+                cur.execute("SELECT 1 FROM urls WHERE code = %s;", (custom_code,))
+                if cur.fetchone():
+                    raise ValueError("Erro: slug já está em uso.")
+                code = custom_code
+            else:
+                code = next_code()
 
-        # inserir
-        now = time.strftime('%Y-%m-%d %H:%M:%S%z', time.localtime())
-        if len(urls) == 1:
-            cur.execute("""
-                INSERT INTO urls(code, type, url, created_at, hits)
-                VALUES (%s,'single',%s,%s,0);
-            """, (code, urls[0], now))
-        else:
-            cur.execute("""
-                INSERT INTO urls(code, type, url, created_at, hits)
-                VALUES (%s,'multi',NULL,%s,0);
-            """, (code, now))
-            for u, w in zip(urls, weights):
+            # inserir
+            if len(urls) == 1:
                 cur.execute("""
-                    INSERT INTO targets(code, url, weight, hits)
-                    VALUES (%s,%s,%s,0);
-                """, (code, u, float(w)))
-    conn.commit()
+                    INSERT INTO urls(code, type, url)
+                    VALUES (%s,'single',%s);
+                """, (code, urls[0]))
+            else:
+                cur.execute("""
+                    INSERT INTO urls(code, type, url)
+                    VALUES (%s,'multi',NULL);
+                """, (code,))
+                for u, w in zip(urls, weights):
+                    cur.execute("""
+                        INSERT INTO targets(code, url, weight, hits)
+                        VALUES (%s,%s,%s,0);
+                    """, (code, u, float(w)))
+        conn.commit()
     return code
 
-@with_conn
-def update_short(conn, code, new_code, urls, weights):
-    with conn.cursor() as cur:
-        # existe?
-        cur.execute("SELECT type FROM urls WHERE code = %s;", (code,))
-        row = cur.fetchone()
-        if not row:
-            return None
-        # renomear?
-        if new_code and new_code != code:
-            # reservado/colisão checado fora
-            cur.execute("SELECT 1 FROM urls WHERE code = %s;", (new_code,))
-            if cur.fetchone():
-                raise ValueError("Erro: slug já está em uso.")
-            cur.execute("UPDATE urls SET code = %s WHERE code = %s;", (new_code, code))
-            cur.execute("UPDATE targets SET code = %s WHERE code = %s;", (new_code, code))
-            code = new_code
+def update_short(code, new_code, urls, weights):
+    with DB_POOL.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT type FROM urls WHERE code = %s;", (code,))
+            row = cur.fetchone()
+            if not row:
+                return None
 
-        # aplicar nova configuração
-        if len(urls) == 1:
-            cur.execute("UPDATE urls SET type='single', url=%s WHERE code=%s;", (urls[0], code))
-            cur.execute("DELETE FROM targets WHERE code=%s;", (code,))
-        else:
-            cur.execute("UPDATE urls SET type='multi', url=NULL WHERE code=%s;", (code,))
-            cur.execute("DELETE FROM targets WHERE code=%s;", (code,))
-            for u, w in zip(urls, weights):
-                cur.execute("INSERT INTO targets(code, url, weight, hits) VALUES (%s,%s,%s,0);", (code, u, float(w)))
-    conn.commit()
+            # renomear
+            if new_code and new_code != code:
+                cur.execute("SELECT 1 FROM urls WHERE code = %s;", (new_code,))
+                if cur.fetchone():
+                    raise ValueError("Erro: slug já está em uso.")
+                cur.execute("UPDATE urls SET code = %s WHERE code = %s;", (new_code, code))
+                cur.execute("UPDATE targets SET code = %s WHERE code = %s;", (new_code, code))
+                code = new_code
+
+            # aplicar nova configuração
+            if len(urls) == 1:
+                cur.execute("UPDATE urls SET type='single', url=%s WHERE code=%s;", (urls[0], code))
+                cur.execute("DELETE FROM targets WHERE code=%s;", (code,))
+            else:
+                cur.execute("UPDATE urls SET type='multi', url=NULL WHERE code=%s;", (code,))
+                cur.execute("DELETE FROM targets WHERE code=%s;", (code,))
+                for u, w in zip(urls, weights):
+                    cur.execute("INSERT INTO targets(code, url, weight, hits) VALUES (%s,%s,%s,0);", (code, u, float(w)))
+        conn.commit()
     return code
 
-@with_conn
-def delete_short(conn, code):
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM urls WHERE code=%s;", (code,))
-    conn.commit()
+def delete_short(code):
+    with DB_POOL.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM urls WHERE code=%s;", (code,))
+        conn.commit()
 
-@with_conn
-def pick_target_and_count(conn, code):
-    """Seleciona destino e incrementa hits, tudo dentro da transação."""
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT type, url FROM urls WHERE code=%s;", (code,))
-        u = cur.fetchone()
-        if not u:
-            return None
-        if u["type"] == "single":
-            cur.execute("UPDATE urls SET hits = hits + 1 WHERE code=%s;", (code,))
-            conn.commit()
-            return u["url"]
-        else:
-            cur.execute("SELECT id, url, weight FROM targets WHERE code=%s ORDER BY id;", (code,))
-            ts = cur.fetchall()
-            if not ts:
-                return "ERR_NO_TARGETS"
-            weights = [float(t["weight"]) for t in ts]
-            if sum(weights) == 0:
-                weights = [1.0] * len(ts)
-            idx = random.choices(range(len(ts)), weights=weights, k=1)[0]
-            target_row = ts[idx]
-            # incrementos
-            cur.execute("UPDATE urls SET hits = hits + 1 WHERE code=%s;", (code,))
-            cur.execute("UPDATE targets SET hits = hits + 1 WHERE id=%s;", (target_row["id"],))
-            conn.commit()
-            return target_row["url"]
+def pick_target_and_count(code):
+    """Seleciona destino e incrementa hits."""
+    with DB_POOL.connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute("SELECT type, url FROM urls WHERE code=%s;", (code,))
+            u = cur.fetchone()
+            if not u:
+                return None
+            if u["type"] == "single":
+                cur.execute("UPDATE urls SET hits = hits + 1 WHERE code=%s;", (code,))
+                conn.commit()
+                return u["url"]
+            else:
+                cur.execute("SELECT id, url, weight FROM targets WHERE code=%s ORDER BY id;", (code,))
+                ts = cur.fetchall()
+                if not ts:
+                    return "ERR_NO_TARGETS"
+                weights = [float(t["weight"]) for t in ts]
+                if sum(weights) == 0:
+                    weights = [1.0] * len(ts)
+                idx = random.choices(range(len(ts)), weights=weights, k=1)[0]
+                target_row = ts[idx]
+                # incrementos
+                cur.execute("UPDATE urls SET hits = hits + 1 WHERE code=%s;", (code,))
+                cur.execute("UPDATE targets SET hits = hits + 1 WHERE id=%s;", (target_row["id"],))
+                conn.commit()
+                return target_row["url"]
 
 # -------------------- HTTP Handler --------------------
 class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
@@ -316,7 +301,7 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
         # ajuda
         if path == "help":
             return self.respond_text(
-                "EncCurtador (PostgreSQL)\n"
+                "EncCurtador (psycopg 3 / PostgreSQL)\n"
                 "Endpoints:\n"
                 " POST /new { urls:[...], weights:[...], code?:slug }\n"
                 " POST /update { code, new_code?, urls, weights }\n"
@@ -328,7 +313,6 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
             )
         if path == "list":
             data = list_all()
-            # resposta texto simples
             lines = []
             for e in data:
                 if e["type"] == "single":
@@ -345,11 +329,7 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
             if not entry:
                 return self.respond_text("Código não encontrado.", status=404)
             raw = json.dumps({"code": code, **entry}, ensure_ascii=False, default=str)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(raw.encode("utf-8"))))
-            self.end_headers()
-            self.wfile.write(raw.encode("utf-8"))
+            self.send_json(raw)
             return
         if path.startswith("stats/"):
             code = path.split("/", 1)[1] if "/" in path else ""
@@ -388,7 +368,6 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
             return self.respond_text("Configuração inválida para MULTI (sem targets).", status=500)
         self.send_response(302)
         self.send_header("Location", target)
-        # Evita cache do redirect
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.end_headers()
@@ -410,11 +389,9 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
             weights = payload.get("weights", [])
             custom_code = payload.get("code", None)
 
-            # valida slug
             if custom_code is not None and (not isinstance(custom_code, str) or not validate_slug_path(custom_code)):
                 return self.respond_text("Erro: 'code' inválido. Use letras/números/hífen por segmento (1–32), separados por '/'.", status=400)
 
-            # valida URLs/pesos
             if not urls or not isinstance(urls, list):
                 return self.respond_text("Erro: 'urls' deve ser lista com ao menos 1 item.", status=400)
             urls = [u.strip() for u in urls if isinstance(u, str) and u.strip()]
@@ -495,6 +472,13 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
         return self.respond_text("Endpoint POST não encontrado.", status=404)
 
     # helpers de resposta
+    def send_json(self, raw_json, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw_json.encode("utf-8"))))
+        self.end_headers()
+        self.wfile.write(raw_json.encode("utf-8"))
+
     def respond_text(self, text, status=200):
         data = text.encode("utf-8")
         self.send_response(status)
@@ -516,7 +500,6 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
 
 # -------------------- Run --------------------
 def run():
-    init_db_pool()
     ensure_schema()
     with socketserver.TCPServer((HOST, PORT), ShortenerHandler) as httpd:
         print(f"Servidor rodando em http://{HOST}:{PORT}")
