@@ -15,7 +15,7 @@ PORT = int(os.getenv("PORT", 8000))
 DB_FILE = "db.json"
 
 ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-RESERVED = {"new", "list", "stats", "help", "index.html"}
+RESERVED = {"new", "list", "stats", "help", "index.html"}  # slugs reservados
 
 def base62_encode(n: int) -> str:
     if n == 0:
@@ -51,14 +51,14 @@ def build_short_base(handler: http.server.BaseHTTPRequestHandler) -> str:
 def validate_slug_path(slug: str) -> bool:
     """
     Valida slug com múltiplos segmentos separados por '/'.
-    Cada segmento: [A-Za-z0-9-], 1..32 chars.
+    Cada segmento: [A-Za-z0-9-], 1..32 chars. Sem barra inicial/final e sem '//' duplicado.
+    Bloqueia nomes reservados.
     Ex.: 'PromocaoMercadoPago/Whats'
     """
     if not isinstance(slug, str):
         return False
     if len(slug) < 1 or len(slug) > 128:
         return False
-    # Sem barras duplicadas, sem barras no início/fim
     if slug.startswith("/") or slug.endswith("/") or "//" in slug:
         return False
     segments = slug.split("/")
@@ -73,7 +73,7 @@ INDEX_HTML = """<!doctype html>
 <html lang="pt-br">
 <head>
 <meta charset="utf-8">
-<title>EncCurtador • Painel</title>
+<title>EncCurtador • Painel</</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root { --bg:#0f172a; --card:#111827; --txt:#e5e7eb; --muted:#a1a1aa; --accent:#22c55e; --danger:#ef4444; }
@@ -104,6 +104,10 @@ hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
 .item code{max-width:100%;overflow:auto}
 .weight{max-width:120px}
 .remove{background:#ef4444}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center}
+.modal-content{background:var(--card);padding:16px;border-radius:12px;max-width:900px;width:95%;border:1px solid #1f2937}
+.modal-title{font-size:1.2rem;margin:0 0 10px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 </style>
 </head>
 <body>
@@ -116,7 +120,7 @@ hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
       <div>
         <label>Slug (opcional)</label>
         <input id="slugCode" placeholder="ex.: PromocaoMercadoPago/Whats" />
-        <div class="small">Apenas letras, números e hífen por segmento. Use '/' para separar. Ex.: <code>PromocaoMercadoPago/Whats</code>.</div>
+        <div class="small">Apenas letras, números e hífen por segmento. Ex.: <code>PromocaoMercadoPago/Whats</code>.</div>
       </div>
       <div class="row" style="align-items:flex-end">
         <label class="badge">Tipo de destino</label>
@@ -153,7 +157,6 @@ hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
           <input id="waNumber" placeholder="41999998888" />
         </div>
       </div>
-
       <div class="grid grid-2">
         <div>
           <label>Mensagem</label>
@@ -165,12 +168,10 @@ hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
           <div class="small">Peso 0 = nunca selecionado; valores maiores aumentam a chance.</div>
         </div>
       </div>
-
       <div class="row">
         <button class="btn" id="addWa">Adicionar destino WhatsApp</button>
         <span class="small">Adicione quantos números quiser. Cada um tem seu próprio peso.</span>
       </div>
-
       <div id="waList" class="list" style="margin-top:10px"></div>
     </div>
 
@@ -190,6 +191,42 @@ hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
     </table>
     <div class="row">
       <button class="btn" id="refreshList">Atualizar lista</button>
+    </div>
+  </div>
+
+  <!-- MODAL DE EDIÇÃO -->
+  <div class="modal" id="editModal">
+    <div class="modal-content">
+      <h3 class="modal-title">Editar link</h3>
+      <div class="grid grid-2">
+        <div>
+          <label>Slug atual</label>
+          <input id="editCode" readonly />
+          <div class="small">Este é o código atual do link.</div>
+        </div>
+        <div>
+          <label>Novo slug (opcional)</label>
+          <input id="editNewCode" placeholder="ex.: Suporte/Whats" />
+          <div class="small">Deixe em branco para manter o atual.</div>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label>URLs (uma por linha)</label>
+          <textarea id="editUrls"></textarea>
+          <div class="small">Ex.: <code>https://wa.me/5541999998888?text=...</code> ou <code>https://site.com</code></div>
+        </div>
+        <div>
+          <label>Pesos (uma por linha na mesma ordem das URLs)</label>
+          <textarea id="editWeights"></textarea>
+          <div class="small">Se vazio, peso = 1 para todos. Valores negativos viram 0.</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="editCancel">Cancelar</button>
+        <button class="btn-primary" id="editSave">Salvar alterações</button>
+      </div>
+      <div class="small" id="editResult"></div>
     </div>
   </div>
 
@@ -213,6 +250,16 @@ const createResult = document.getElementById('createResult');
 const linksTableBody = document.querySelector('#linksTable tbody');
 const refreshListBtn = document.getElementById('refreshList');
 const slugCode = document.getElementById('slugCode');
+
+// Modal edição
+const editModal = document.getElementById('editModal');
+const editCode = document.getElementById('editCode');
+const editNewCode = document.getElementById('editNewCode');
+const editUrls = document.getElementById('editUrls');
+const editWeights = document.getElementById('editWeights');
+const editCancel = document.getElementById('editCancel');
+const editSave = document.getElementById('editSave');
+const editResult = document.getElementById('editResult');
 
 let waDestinos = []; // {url, phone, weight}
 
@@ -336,6 +383,8 @@ async function carregarLista() {
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
         /${code}Abrir</a>
         /stats/${code}Stats</a>
+        <button class="btn" onclick="abrirEdicao('${code}')">Editar</button>
+        <button class="btn-danger" onclick="excluirLink('${code}')">Excluir</button>
       </td>
     `;
     linksTableBody.appendChild(tr);
@@ -348,6 +397,72 @@ function copiar(txt) {
 
 refreshListBtn.addEventListener('click', carregarLista);
 window.addEventListener('load', carregarLista);
+
+// ------- EDIÇÃO -------
+async function abrirEdicao(code) {
+  editResult.textContent = '';
+  editCode.value = code;
+  editNewCode.value = '';
+  editUrls.value = '';
+  editWeights.value = '';
+  try {
+    const resp = await fetch(`/get/${code}`);
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    const urls = (data.type === 'single') ? [data.url] : (data.targets.map(t => t.url));
+    const weights = (data.type === 'single') ? [1] : (data.targets.map(t => t.weight || 1));
+    editUrls.value = urls.join('\\n');
+    editWeights.value = weights.join('\\n');
+    editModal.style.display = 'flex';
+  } catch (e) {
+    alert('Erro ao abrir edição: ' + e.message);
+  }
+}
+editCancel.addEventListener('click', () => {
+  editModal.style.display = 'none';
+});
+editSave.addEventListener('click', async () => {
+  editResult.textContent = 'Salvando...';
+  const code = editCode.value.trim();
+  const newCode = editNewCode.value.trim();
+  const urls = (editUrls.value || '').split('\\n').map(s=>s.trim()).filter(Boolean);
+  const weights = (editWeights.value || '').split('\\n').map(s=>s.trim()).filter(Boolean)
+                    .map(x => { const n = parseFloat(x); return (Number.isNaN(n) || n < 0) ? 1 : n; });
+  try {
+    const payload = { code, urls, weights };
+    if (newCode) payload.new_code = newCode;
+    const resp = await fetch('/update', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const txt = await resp.text();
+    if (!resp.ok) throw new Error(txt);
+    editResult.textContent = '✅ Alterações salvas: ' + txt;
+    await carregarLista();
+    setTimeout(()=>{ editModal.style.display='none'; }, 600);
+  } catch (e) {
+    editResult.textContent = 'Erro: ' + e.message;
+  }
+});
+
+// ------- EXCLUSÃO -------
+async function excluirLink(code) {
+  if (!confirm(`Excluir o link '${code}'? Esta ação não pode ser desfeita.`)) return;
+  try {
+    const resp = await fetch('/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ code })
+    });
+    const txt = await resp.text();
+    if (!resp.ok) throw new Error(txt);
+    alert('✅ Excluído: ' + code);
+    await carregarLista();
+  } catch (e) {
+    alert('Erro ao excluir: ' + e.message);
+  }
+}
 </script>
 </html>
 """
@@ -368,13 +483,16 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
             return self.respond_text(
                 "EncCurtador ativo!\n"
                 "Uso via API:\n"
-                "  POST /new  (JSON: { urls: [...], weights: [...], code?: 'slug/optional' })\n"
+                "  POST /new     (JSON: { urls: [...], weights: [...], code?: 'slug/optional' })\n"
+                "  GET  /get/<code>\n"
+                "  POST /update  (JSON: { code, new_code?, urls, weights })\n"
+                "  POST /delete  (JSON: { code })\n"
                 "  GET  /list\n"
                 "  GET  /stats/<code>\n"
                 "  GET  /<code>\n"
             )
 
-        # Lista
+        # Lista (texto)
         if path == "list":
             with DB_LOCK:
                 db = load_db()
@@ -388,6 +506,41 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
                             parts.append(f"{t['url']} [w={t.get('weight',1)} hits={t['hits']}]")
                         lines.append(f"{code} -> MULTI: {', '.join(parts)} (total hits: {entry['hits']})")
                 return self.respond_text("\n".join(lines) if lines else "Sem links ainda.")
+
+        # Pegar dados de um code (JSON)
+        if path.startswith("get/"):
+            code = path.split("/", 1)[1] if "/" in path else ""
+            if not code:
+                return self.respond_text("Uso: /get/<code>", status=400)
+            with DB_LOCK:
+                db = load_db()
+                entry = db["urls"].get(code)
+            if not entry:
+                return self.respond_text("Código não encontrado.", status=404)
+            if entry.get("type") == "single":
+                data = {
+                    "code": code,
+                    "type": "single",
+                    "url": entry["url"],
+                    "hits": entry["hits"],
+                    "created_at": entry["created_at"]
+                }
+            else:
+                data = {
+                    "code": code,
+                    "type": "multi",
+                    "targets": entry["targets"],
+                    "hits": entry["hits"],
+                    "created_at": entry["created_at"]
+                }
+            # responder JSON
+            raw = json.dumps(data, ensure_ascii=False)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw.encode("utf-8"))))
+            self.end_headers()
+            self.wfile.write(raw.encode("utf-8"))
+            return
 
         # Stats
         if path.startswith("stats/"):
@@ -423,7 +576,7 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
                     lines.append(f"  - {t['url']} | w={t.get('weight',1)} | hits={t['hits']} ({pct:.2f}%)")
                 return self.respond_text("\n".join(lines))
 
-        # Redirecionamento
+        # Redirecionamento (com 302 + no-cache)
         with DB_LOCK:
             db = load_db()
             entry = db["urls"].get(path)
@@ -434,8 +587,10 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
                 with DB_LOCK:
                     db["urls"][path]["hits"] += 1
                     save_db(db)
-                self.send_response(301)
+                self.send_response(302)  # temporário
                 self.send_header("Location", target_url)
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
                 self.end_headers()
                 return
             else:
@@ -451,8 +606,10 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
                     db["urls"][path]["hits"] += 1
                     db["urls"][path]["targets"][idx]["hits"] += 1
                     save_db(db)
-                self.send_response(301)
+                self.send_response(302)  # temporário
                 self.send_header("Location", target)
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
                 self.end_headers()
                 return
         else:
@@ -463,6 +620,7 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.lstrip("/")
 
+        # Criar novo
         if path == "new":
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -475,16 +633,11 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
             weights = payload.get("weights", [])
             custom_code = payload.get("code", None)
 
-            print("[POST /new] urls:", urls)
-            print("[POST /new] weights:", weights)
-            print("[POST /new] code:", custom_code)
-
             # valida slug opcional (múltiplos segmentos)
             if custom_code is not None:
                 if not isinstance(custom_code, str) or not validate_slug_path(custom_code):
                     return self.respond_text(
-                        "Erro: 'code' inválido. Use apenas letras, números e hífen por segmento, separado por '/', 1–32 chars cada. "
-                        "Ex.: PromocaoMercadoPago/Whats",
+                        "Erro: 'code' inválido. Use apenas letras, números e hífen por segmento, separado por '/', 1–32 chars cada. Ex.: PromocaoMercadoPago/Whats",
                         status=400
                     )
 
@@ -533,7 +686,7 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
                     db["counter"] += 1
                     code = base62_encode(db["counter"])
 
-                # criar
+                # criar entrada
                 if len(urls) == 1:
                     db["urls"][code] = {
                         "type": "single",
@@ -555,6 +708,109 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
 
             return self.respond_text(short)
 
+        # Atualizar existente
+        if path == "update":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length).decode("utf-8")
+                payload = json.loads(raw)
+            except Exception as e:
+                return self.respond_text(f"Erro ao ler JSON: {e}", status=400)
+
+            code = payload.get("code")
+            new_code = payload.get("new_code", None)
+            urls = payload.get("urls", [])
+            weights = payload.get("weights", [])
+
+            if not code or not isinstance(code, str):
+                return self.respond_text("Erro: 'code' é obrigatório.", status=400)
+
+            # valida novo slug, se informado
+            if new_code is not None:
+                if not isinstance(new_code, str) or not validate_slug_path(new_code):
+                    return self.respond_text("Erro: 'new_code' inválido.", status=400)
+
+            # valida URLs/pesos
+            if not urls or not isinstance(urls, list):
+                return self.respond_text("Erro: 'urls' deve ser lista com ao menos 1 item.", status=400)
+            urls = [u.strip() for u in urls if isinstance(u, str) and u.strip()]
+            if not urls:
+                return self.respond_text("Erro: nenhuma URL válida em 'urls'.", status=400)
+            if not all(is_http_url(u) for u in urls):
+                return self.respond_text("Erro: todas as URLs devem começar com http:// ou https://", status=400)
+
+            if weights and (not isinstance(weights, list) or len(weights) != len(urls)):
+                return self.respond_text("Erro: 'weights' deve ter o mesmo tamanho de 'urls'.", status=400)
+            try:
+                wtmp = [float(w) for w in weights] if weights else [1.0] * len(urls)
+                weights = [ (0.0 if (isinstance(w, float) and w < 0) else (w if isinstance(w, float) else 1.0)) for w in wtmp ]
+            except Exception:
+                return self.respond_text("Erro: 'weights' deve conter números.", status=400)
+
+            with DB_LOCK:
+                db = load_db()
+                entry = db["urls"].get(code)
+                if not entry:
+                    return self.respond_text("Código não encontrado.", status=404)
+
+                # Se renomear:
+                if new_code:
+                    if new_code in RESERVED:
+                        return self.respond_text("Erro: slug reservado.", status=400)
+                    if new_code in db["urls"]:
+                        return self.respond_text("Erro: slug já está em uso.", status=409)
+
+                    # mover entrada para o novo slug
+                    db["urls"][new_code] = entry
+                    del db["urls"][code]
+                    code = new_code  # passa a valer o novo
+
+                # aplicar novos destinos
+                if len(urls) == 1:
+                    db["urls"][code] = {
+                        "type": "single",
+                        "url": urls[0],
+                        "created_at": entry.get("created_at", time.time()),
+                        "hits": entry.get("hits", 0)
+                    }
+                else:
+                    targets = [{"url": u, "weight": w, "hits": 0} for u, w in zip(urls, weights)]
+                    # mantém hits total; zera por target (opção simples). Se quiser, podemos reaproveitar hits por URL igual.
+                    db["urls"][code] = {
+                        "type": "multi",
+                        "targets": targets,
+                        "created_at": entry.get("created_at", time.time()),
+                        "hits": entry.get("hits", 0)
+                    }
+
+                save_db(db)
+                short = f"{build_short_base(self)}/{code}"
+
+            return self.respond_text(short)
+
+        # Excluir existente
+        if path == "delete":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length).decode("utf-8")
+                payload = json.loads(raw)
+            except Exception as e:
+                return self.respond_text(f"Erro ao ler JSON: {e}", status=400)
+
+            code = payload.get("code")
+            if not code or not isinstance(code, str):
+                return self.respond_text("Erro: 'code' é obrigatório.", status=400)
+
+            with DB_LOCK:
+                db = load_db()
+                if code not in db["urls"]:
+                    return self.respond_text("Código não encontrado.", status=404)
+                del db["urls"][code]
+                save_db(db)
+
+            return self.respond_text(f"Excluído: {code}")
+
+        # Desconhecido
         return self.respond_text("Endpoint POST não encontrado.", status=404)
 
     # ---------- helpers ----------
