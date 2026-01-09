@@ -62,368 +62,405 @@ def build_short_base(handler: http.server.BaseHTTPRequestHandler) -> str:
     return f"http://{HOST}:{PORT}"
 
 # -------------------- HTML UI completa --------------------
-INDEX_HTML = r"""
-<!doctype html>
-<html lang="pt-BR">
+
+INDEX_HTML = """<!doctype html>
+<html lang="pt-br">
 <head>
-<meta charset="utf-8"/>
-<title>EncCurtador • Painel</title>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta charset="utf-8">
+<title>EncCurtador • Painel</</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-:root{
-  --bg:#0f172a; --panel:#111827; --muted:#6b7280; --border:#1f2937;
-  --accent:#22c55e; --accent2:#3b82f6; --danger:#ef4444; --txt:#e5e7eb;
-}
-*{box-sizing:border-box}
-body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);margin:0}
-.container{max-width:1100px;margin:32px auto;padding:0 16px}
-h1{margin:0 0 12px;font-size:28px}
-small{color:var(--muted)}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin:16px 0}
-.panel h2{margin:0 0 12px;font-size:20px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-label{display:block;font-size:14px;color:#cbd5e1;margin:8px 0 4px}
-input,textarea,select,button{width:100%;font-size:15px;padding:10px;border-radius:8px;border:1px solid var(--border);background:#0b1020;color:var(--txt)}
-textarea{min-height:90px}
-button{cursor:pointer;border:0}
-.btn{background:var(--accent);color:#021308;font-weight:600}
-.btn.secondary{background:var(--accent2);color:#04121f}
-.btn.danger{background:var(--danger);color:#2b0b0b}
-.btn.muted{background:#1f2937;color:#cbd5e1}
-.row{display:flex;gap:10px;align-items:center}
-.flex-1{flex:1}
-code,pre{background:#0b1020;border:1px solid var(--border);padding:10px;border-radius:8px;color:#93c5fd;overflow:auto}
-table{width:100%;border-collapse:collapse;margin-top:8px}
-th,td{border:1px solid var(--border);padding:8px;text-align:left}
-th{background:#0b1020}
-.tag{display:inline-block;background:#0b3b20;color:#93f2ae;border:1px solid #135c35;padding:2px 8px;border-radius:999px;font-size:12px}
-.badge{display:inline-block;background:#0b223b;color:#8ec7ff;border:1px solid #114a7b;padding:2px 8px;border-radius:999px;font-size:12px}
-.copy{display:inline-flex;gap:8px;align-items:center;margin-top:8px}
-hr{border:0;border-top:1px solid var(--border);margin:16px 0}
-.footer{color:var(--muted);font-size:13px;text-align:center;margin:24px 0}
-a{color:#93c5fd}
-.hidden{display:none}
+:root { --bg:#0f172a; --card:#111827; --txt:#e5e7eb; --muted:#a1a1aa; --accent:#22c55e; --danger:#ef4444; }
+*{box-sizing:border-box} body{margin:0;background:#0b1022;color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu}
+.container{max-width:1024px;margin:32px auto;padding:0 16px}
+h1{font-size:1.6rem;margin:0 0 16px}
+.card{background:var(--card);padding:16px;border-radius:12px;border:1px solid #1f2937}
+.grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:1fr 1fr}
+label{display:block;font-size:.9rem;margin-bottom:6px;color:#cbd5e1}
+input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #334155;background:#0b1220;color:var(--txt)}
+input[type="number"]{width:100%}
+textarea{min-height:80px}
+button{padding:10px 14px;border:none;border-radius:8px;cursor:pointer}
+.btn{background:#334155;color:#fff}
+.btn-primary{background:var(--accent);color:#00150c;font-weight:600}
+.btn-danger{background:var(--danger);color:#fff}
+.small{font-size:.85rem;color:var(--muted)}
+.table{width:100%;border-collapse:collapse;margin-top:12px}
+.table th,.table td{border-bottom:1px solid #1f2937;padding:8px;text-align:left;font-size:.92rem}
+.row{display:flex;gap:8px;align-items:center}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.8rem;background:#1f2937;color:#cbd5e1}
+code{background:#0b1220;padding:2px 6px;border-radius:6px;border:1px solid #1f2937}
+footer{margin-top:24px;color:#94a3b8}
+hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#0b1220;padding:8px;border-radius:8px;border:1px solid #1f2937}
+.item code{max-width:100%;overflow:auto}
+.weight{max-width:120px}
+.remove{background:#ef4444}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center}
+.modal-content{background:var(--card);padding:16px;border-radius:12px;max-width:900px;width:95%;border:1px solid #1f2937}
+.modal-title{font-size:1.2rem;margin:0 0 10px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 </style>
 </head>
 <body>
 <div class="container">
   <h1>EncCurtador • Painel</h1>
-  <small>Crie links curtos, distribua entre múltiplos destinos (com pesos) e veja estatísticas.</small>
 
-  <!-- Criar link curto -->
-  <div class="panel">
-    <h2>Criar link curto</h2>
-    <div class="grid">
+  <div class="card">
+    <h2 style="margin-top:0">Criar link curto</h2>
+    <div class="grid grid-2">
       <div>
         <label>Slug (opcional)</label>
-        <input id="new-code" placeholder="Ex.: PromocaoMercadoPago/Whats"/>
-        <small class="muted">Use letras, números e hífen por segmento (1–32), separados por '/'.</small>
-        <hr>
-        <label>Tipo de destino</label>
-        <div class="row">
-          <label class="row"><input type="radio" name="tipo" value="web" checked> <span>&nbsp;Web (URL)</span></label>
-          <label class="row"><input type="radio" name="tipo" value="wa"> <span>&nbsp;WhatsApp (wa.me)</span></label>
-        </div>
-        <div id="web-box">
-          <label>URLs (uma por linha)</label>
-          <textarea id="web-urls" placeholder="https://site.com&#10;https://outro.com"></textarea>
-          <label>Pesos (uma por linha na mesma ordem)</label>
-          <textarea id="web-weights" placeholder="Se vazio, peso = 1 para todos."></textarea>
-        </div>
-        <div id="wa-box" class="hidden">
-          <div class="row">
-            <div class="flex-1">
-              <label>DDI</label>
-              <input id="wa-ddi" value="55"/>
-            </div>
-            <div class="flex-1">
-              <label>Número (somente dígitos)</label>
-              <input id="wa-number" placeholder="41999998888"/>
-            </div>
-          </div>
-          <label>Mensagem</label>
-          <textarea id="wa-message" placeholder="Digite a mensagem que será enviada..."></textarea>
-          <label>Peso</label>
-          <input id="wa-weight" type="number" step="0.1" value="1"/>
-          <div class="row">
-            <button class="btn secondary" id="wa-add">Adicionar destino WhatsApp</button>
-            <button class="btn muted" id="wa-clear">Limpar lista</button>
-          </div>
-          <table id="wa-table" class="hidden">
-            <thead><tr><th>Destino (wa.me)</th><th>Peso</th><th>Ações</th></tr></thead>
-            <tbody></tbody>
-          </table>
-          <small class="muted">Adicione quantos números quiser. Cada um tem seu próprio peso.</small>
-        </div>
-        <hr>
-        <button class="btn" id="create-btn">Criar link curto</button>
-        <div id="create-result" class="hidden">
-          <div class="copy">
-            <code id="create-url"></code>
-            <button class="btn secondary" id="copy-btn">Copiar</button>
-            <a id="open-btn" class="badge" target="_blank">Abrir</a>
-          </div>
-          <small class="muted">Compartilhe este link com seus clientes.</small>
-        </div>
+        <input id="slugCode" placeholder="ex.: PromocaoMercadoPago/Whats" />
+        <div class="small">Apenas letras, números e hífen por segmento. Ex.: <code>PromocaoMercadoPago/Whats</code>.</div>
       </div>
-
-      <!-- Ajuda / instruções -->
-      <div>
-        <pre>
-API:
-POST /new      { urls:[...], weights:[...], code?: 'slug/opcional' }
-POST /update   { code, new_code?, urls:[...], weights:[...] }
-POST /delete   { code }
-GET  /list
-GET  /get/{code}
-GET  /stats/{code}
-GET  /{code}   (redireciona)
-        </pre>
-        <div class="tag">Dica</div>
-        <small>Para WhatsApp, o destino é: <code>https://wa.me/DDINUMERO?text=MENSAGEM</code>. O painel monta isso para você.</small>
+      <div class="row" style="align-items:flex-end">
+        <label class="badge">Tipo de destino</label>
+        <select id="destType">
+          <option value="web">Web (URL)</option>
+          <option value="wa">WhatsApp (wa.me)</option>
+        </select>
       </div>
     </div>
-  </div>
 
-  <!-- Links criados -->
-  <div class="panel">
-    <h2>Links criados</h2>
-    <div class="row">
-      <button class="btn secondary" id="refresh-list">Atualizar lista</button>
-      <button class="btn muted" id="clear-list">Limpar</button>
-    </div>
-    <pre id="list-box" class="hidden"></pre>
-  </div>
-
-  <!-- Editar link -->
-  <div class="panel">
-    <h2>Editar link</h2>
-    <div class="grid">
+    <!-- WEB FORM -->
+    <div id="webForm" class="grid" style="margin-top:10px">
       <div>
-        <label>Slug atual</label>
-        <input id="edit-code" placeholder="Ex.: G9 ou Promocao/Whats"/>
-        <label>Novo slug (opcional)</label>
-        <input id="edit-new-code" placeholder="Deixe em branco para manter."/>
         <label>URLs (uma por linha)</label>
-        <textarea id="edit-urls" placeholder="https://wa.me/5541999998888?text=...&#10;https://site.com"></textarea>
-        <label>Pesos (uma por linha na mesma ordem das URLs)</label>
-        <textarea id="edit-weights" placeholder="Se vazio, peso = 1 para todos. Valores negativos viram 0."></textarea>
-        <div class="row">
-          <button class="btn secondary" id="edit-save">Salvar alterações</button>
-          <button class="btn muted" id="edit-cancel">Cancelar</button>
-        </div>
+        <textarea id="webUrls" placeholder="https://site1.com\nhttps://site2.com"></textarea>
+        <div class="small">Todas devem começar com <code>http://</code> ou <code>https://</code>.</div>
       </div>
       <div>
-        <div class="row">
-          <div class="flex-1">
-            <label>Excluir por slug</label>
-            <input id="del-code" placeholder="Ex.: G9"/>
-          </div>
-        </div>
-        <button class="btn danger" id="del-btn">Excluir</button>
-        <hr>
-        <label>Stats de um código</label>
-        <div class="row">
-          <input id="stats-code" class="flex-1" placeholder="Ex.: G9"/>
-          <button class="btn secondary" id="stats-btn">Ver stats</button>
-        </div>
-        <pre id="stats-box" class="hidden"></pre>
-        <hr>
-        <label>Get JSON de um código</label>
-        <div class="row">
-          <input id="get-code" class="flex-1" placeholder="Ex.: G9"/>
-          <button class="btn secondary" id="get-btn">Ver JSON</button>
-        </div>
-        <pre id="get-box" class="hidden"></pre>
+        <label>Pesos (opcional, uma por linha na mesma ordem)</label>
+        <textarea id="webWeights" placeholder="50\n30\n20"></textarea>
+        <div class="small">Se vazio, peso = 1 para todos.</div>
       </div>
+    </div>
+
+    <!-- WHATSAPP FORM -->
+    <div id="waForm" class="grid" style="display:none;margin-top:10px">
+      <div class="grid grid-2">
+        <div>
+          <label>DDI</label>
+          <input id="waDdi" value="55" />
+        </div>
+        <div>
+          <label>Número (somente dígitos)</label>
+          <input id="waNumber" placeholder="41999998888" />
+        </div>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label>Mensagem</label>
+          <textarea id="waMsg" placeholder="Olá! Quero aproveitar a promoção."></textarea>
+        </div>
+        <div>
+          <label>Peso do destino</label>
+          <input id="waWeight" type="number" min="0" step="1" value="1" />
+          <div class="small">Peso 0 = nunca selecionado; valores maiores aumentam a chance.</div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn" id="addWa">Adicionar destino WhatsApp</button>
+        <span class="small">Adicione quantos números quiser. Cada um tem seu próprio peso.</span>
+      </div>
+      <div id="waList" class="list" style="margin-top:10px"></div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="btn-primary" id="createBtn">Criar link curto</button>
+      <span id="createResult" class="small"></span>
     </div>
   </div>
 
-  <div class="footer">
-    Servidor local. Para compartilhar publicamente, faça deploy (Render).  
-    Respostas de redirecionamento enviam <code>Cache-Control: no-store</code>.
+  <div class="card" style="margin-top:16px">
+    <h2 style="margin-top:0">Links criados</h2>
+    <table class="table" id="linksTable">
+      <thead>
+        <tr><th>Código</th><th>Destinos</th><th>Hits</th><th>Ações</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="row">
+      <button class="btn" id="refreshList">Atualizar lista</button>
+    </div>
   </div>
+
+  <!-- MODAL DE EDIÇÃO -->
+  <div class="modal" id="editModal">
+    <div class="modal-content">
+      <h3 class="modal-title">Editar link</h3>
+      <div class="grid grid-2">
+        <div>
+          <label>Slug atual</label>
+          <input id="editCode" readonly />
+          <div class="small">Este é o código atual do link.</div>
+        </div>
+        <div>
+          <label>Novo slug (opcional)</label>
+          <input id="editNewCode" placeholder="ex.: Suporte/Whats" />
+          <div class="small">Deixe em branco para manter o atual.</div>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label>URLs (uma por linha)</label>
+          <textarea id="editUrls"></textarea>
+          <div class="small">Ex.: <code>https://wa.me/5541999998888?text=...</code> ou <code>https://site.com</code></div>
+        </div>
+        <div>
+          <label>Pesos (uma por linha na mesma ordem das URLs)</label>
+          <textarea id="editWeights"></textarea>
+          <div class="small">Se vazio, peso = 1 para todos. Valores negativos viram 0.</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="editCancel">Cancelar</button>
+        <button class="btn-primary" id="editSave">Salvar alterações</button>
+      </div>
+      <div class="small" id="editResult"></div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Servidor local. Para compartilhar publicamente, faça deploy (Render/Railway/Heroku).</div>
+  </footer>
 </div>
 
 <script>
-(function(){
-  const q = (sel)=>document.querySelector(sel);
-  const qa = (sel)=>Array.from(document.querySelectorAll(sel));
-  const show = (el)=>el.classList.remove('hidden');
-  const hide = (el)=>el.classList.add('hidden');
+const destType = document.getElementById('destType');
+const webForm = document.getElementById('webForm');
+const waForm = document.getElementById('waForm');
+const waDdi = document.getElementById('waDdi');
+const waNumber = document.getElementById('waNumber');
+const waMsg = document.getElementById('waMsg');
+const waWeight = document.getElementById('waWeight');
+const waList = document.getElementById('waList');
+const addWa = document.getElementById('addWa');
+const createBtn = document.getElementById('createBtn');
+const createResult = document.getElementById('createResult');
+const linksTableBody = document.querySelector('#linksTable tbody');
+const refreshListBtn = document.getElementById('refreshList');
+const slugCode = document.getElementById('slugCode');
 
-  // Alterna caixas Web/WhatsApp
-  qa('input[name="tipo"]').forEach(r=>{
-    r.addEventListener('change', ()=>{
-      const isWeb = q('input[name="tipo"]:checked').value === 'web';
-      (isWeb?show:hide)(q('#web-box'));
-      (!isWeb?show:hide)(q('#wa-box'));
-    });
-  });
+// Modal edição
+const editModal = document.getElementById('editModal');
+const editCode = document.getElementById('editCode');
+const editNewCode = document.getElementById('editNewCode');
+const editUrls = document.getElementById('editUrls');
+const editWeights = document.getElementById('editWeights');
+const editCancel = document.getElementById('editCancel');
+const editSave = document.getElementById('editSave');
+const editResult = document.getElementById('editResult');
 
-  // Lista de destinos WhatsApp (em memória no navegador)
-  const waList = [];
-  function renderWaTable(){
-    const tbl = q('#wa-table');
-    const tbody = tbl.querySelector('tbody');
-    tbody.innerHTML = '';
-    if (waList.length === 0){ hide(tbl); return; }
-    show(tbl);
-    waList.forEach((item, idx)=>{
-      const tr = document.createElement('tr');
-      const url = `https://wa.me/${item.ddi}${item.number}?text=${encodeURIComponent(item.message)}`;
-      tr.innerHTML = `
-        <td><code>${url}</code></td>
-        <td>${item.weight}</td>
-        <td><button class="btn danger" data-idx="${idx}">Remover</button></td>
-      `;
-      tbody.appendChild(tr);
-    });
-    tbody.querySelectorAll('button[data-idx]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const i = parseInt(btn.getAttribute('data-idx'));
-        waList.splice(i,1);
-        renderWaTable();
-      });
-    });
+let waDestinos = []; // {url, phone, weight}
+
+destType.addEventListener('change', () => {
+  const v = destType.value;
+  webForm.style.display = (v === 'web') ? '' : 'none';
+  waForm.style.display = (v === 'wa') ? '' : 'none';
+});
+
+addWa.addEventListener('click', () => {
+  const ddiClean = (waDdi.value || '').trim().replace(/[^0-9]/g,'');   // só dígitos
+  const num = (waNumber.value || '').trim().replace(/[^0-9]/g,'');
+  const msgText = (waMsg.value || '').trim();
+  let w = parseFloat(waWeight.value);
+
+  if (!ddiClean || !num) {
+    alert('Informe DDI e número (apenas dígitos).');
+    return;
   }
-  q('#wa-add').addEventListener('click', ()=>{
-    const ddi = q('#wa-ddi').value.trim();
-    const number = q('#wa-number').value.trim();
-    const message = q('#wa-message').value.trim();
-    let weight = parseFloat(q('#wa-weight').value || '1');
-    if (!ddi || !number || !message){ alert('Preencha DDI, número e mensagem.'); return; }
-    if (!/^\d+$/.test(ddi) || !/^\d+$/.test(number)){ alert('DDI e número devem conter apenas dígitos.'); return; }
-    if (!(weight>=0)){ weight = 1; }
-    waList.push({ddi, number, message, weight});
-    renderWaTable();
-  });
-  q('#wa-clear').addEventListener('click', ()=>{
-    waList.length = 0; renderWaTable();
-  });
+  if (Number.isNaN(w) || w < 0) w = 1;
 
-  // Criar link
-  q('#create-btn').addEventListener('click', async ()=>{
-    const code = q('#new-code').value.trim() || null;
-    const tipo = q('input[name="tipo"]:checked').value;
+  // wa.me exige número internacional sem '+', sem espaços/traços
+  const phone = `${ddiClean}${num}`;
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(msgText)}`;
+
+  waDestinos.push({url, phone, weight: w});
+  renderWaList();
+  waNumber.value = '';
+});
+
+function renderWaList() {
+  waList.innerHTML = '';
+  if (waDestinos.length === 0) {
+    waList.innerHTML = '<div class="small">Nenhum destino WhatsApp adicionado.</div>';
+    return;
+  }
+  waDestinos.forEach((d,i)=>{
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = `
+      <div style="flex:1 1 300px"><code>${d.url}</code></div>
+      <div class="row">
+        <label class="small">Peso</label>
+        <input class="weight" type="number" min="0" step="1" value="${d.weight}" />
+        <button class="btn-danger remove">Remover</button>
+      </div>
+    `;
+    const weightInput = div.querySelector('.weight');
+    weightInput.addEventListener('change', () => {
+      let v = parseFloat(weightInput.value);
+      if (Number.isNaN(v) || v < 0) v = 0;
+      waDestinos[i].weight = v;
+    });
+    const removeBtn = div.querySelector('.remove');
+    removeBtn.addEventListener('click', () => {
+      waDestinos.splice(i,1);
+      renderWaList();
+    });
+    waList.appendChild(div);
+  });
+}
+
+async function criarLinkCurto(urls, weights, code) {
+  const payload = { urls, weights };
+  if (code && code.trim()) payload.code = code.trim();
+  const resp = await fetch('/new', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  if (!resp.ok) throw new Error(await resp.text());
+  return await resp.text();
+}
+
+createBtn.addEventListener('click', async () => {
+  createResult.textContent = 'Criando...';
+  try {
     let urls = [], weights = [];
-    if (tipo === 'web'){
-      urls = q('#web-urls').value.split('\n').map(s=>s.trim()).filter(Boolean);
-      weights = q('#web-weights').value.split('\n').map(s=>s.trim()).filter(Boolean).map(parseFloat);
-      if (weights.length === 0) weights = Array(urls.length).fill(1.0);
+    const code = slugCode.value || '';
+
+    if (destType.value === 'web') {
+      urls = (document.getElementById('webUrls').value || '')
+        .split('\\n').map(s=>s.trim()).filter(Boolean);
+      const ws = (document.getElementById('webWeights').value || '')
+        .split('\\n').map(s=>s.trim()).filter(Boolean);
+      weights = ws.map(x => {
+        const n = parseFloat(x);
+        return Number.isNaN(n) || n < 0 ? 1 : n;
+      });
     } else {
-      if (waList.length === 0){ alert('Adicione ao menos um destino WhatsApp.'); return; }
-      urls = waList.map(item => `https://wa.me/${item.ddi}${item.number}?text=${encodeURIComponent(item.message)}`);
-      weights = waList.map(item => parseFloat(item.weight||1));
+      if (!waDestinos.length) throw new Error('Adicione ao menos um número de WhatsApp.');
+      urls = waDestinos.map(d => d.url);
+      weights = waDestinos.map(d => (Number.isFinite(d.weight) && d.weight >= 0) ? d.weight : 1);
     }
-    if (urls.length === 0){ alert('Informe ao menos uma URL.'); return; }
-    if (weights.length !== urls.length){ alert('Pesos devem ter o mesmo número de linhas das URLs.'); return; }
 
-    try{
-      const res = await fetch('/new', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ urls, weights, code })
-      });
-      const txt = await res.text();
-      if (!res.ok){ alert(txt); return; }
-      q('#create-url').textContent = txt;
-      q('#open-btn').href = txt;
-      show(q('#create-result'));
-    }catch(e){ alert('Erro ao criar link: '+e.message); }
-  });
+    const short = await criarLinkCurto(urls, weights, code);
+    createResult.innerHTML = `✅ Criado: ${short}${short}</a>`;
+    if (destType.value === 'wa') { waDestinos = []; renderWaList(); waWeight.value='1'; }
+    slugCode.value = '';
+    await carregarLista();
+  } catch (e) {
+    createResult.textContent = 'Erro: ' + e.message;
+  }
+});
 
-  // Copiar link
-  q('#copy-btn').addEventListener('click', async ()=>{
-    const v = q('#create-url').textContent;
-    try{ await navigator.clipboard.writeText(v); alert('Copiado!'); }
-    catch{ alert('Não foi possível copiar.'); }
-  });
+async function carregarLista() {
+  const resp = await fetch('/list');
+  const text = await resp.text();
+  const linhas = text.split('\\n').filter(Boolean);
+  linksTableBody.innerHTML = '';
+  for (const l of linhas) {
+    const code = l.split(' -> ')[0].trim();
+    const hitsMatch = l.match(/\\(hits: (\\d+)\\)|\\(total hits: (\\d+)\\)/);
+    const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><code>${code}</code></td>
+      <td>${l.replace(code + ' -> ', '')}</td>
+      <td>${hits}</td>
+      <td class="row">
+        <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
+        /${code}Abrir</a>
+        /stats/${code}Stats</a>
+        <button class="btn" onclick="abrirEdicao('${code}')">Editar</button>
+        <button class="btn-danger" onclick="excluirLink('${code}')">Excluir</button>
+      </td>
+    `;
+    linksTableBody.appendChild(tr);
+  }
+}
 
-  // Lista
-  q('#refresh-list').addEventListener('click', async ()=>{
-    try{
-      const res = await fetch('/list');
-      const txt = await res.text();
-      q('#list-box').textContent = txt || 'Sem links ainda.';
-      show(q('#list-box'));
-    }catch(e){ alert('Erro ao listar: '+e.message); }
-  });
-  q('#clear-list').addEventListener('click', ()=>{
-    hide(q('#list-box')); q('#list-box').textContent='';
-  });
+function copiar(txt) {
+  navigator.clipboard.writeText(txt).then(()=>alert('Link copiado: ' + txt));
+}
 
-  // Editar
-  q('#edit-save').addEventListener('click', async ()=>{
-    const code = q('#edit-code').value.trim();
-    const new_code = q('#edit-new-code').value.trim() || null;
-    let urls = q('#edit-urls').value.split('\n').map(s=>s.trim()).filter(Boolean);
-    let weights = q('#edit-weights').value.split('\n').map(s=>s.trim()).filter(Boolean).map(parseFloat);
-    if (!code){ alert("Informe o slug atual."); return; }
-    if (urls.length === 0){ alert("Informe ao menos uma URL."); return; }
-    if (weights.length === 0) weights = Array(urls.length).fill(1.0);
-    if (weights.length !== urls.length){ alert("Pesos devem ter o mesmo número de linhas das URLs."); return; }
-    try{
-      const res = await fetch('/update', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code, new_code, urls, weights })
-      });
-      const txt = await res.text();
-      if (!res.ok){ alert(txt); return; }
-      alert('Atualizado! Novo link: ' + txt);
-    }catch(e){ alert('Erro ao atualizar: '+e.message); }
-  });
-  q('#edit-cancel').addEventListener('click', ()=>{
-    q('#edit-code').value=''; q('#edit-new-code').value='';
-    q('#edit-urls').value=''; q('#edit-weights').value='';
-  });
+refreshListBtn.addEventListener('click', carregarLista);
+window.addEventListener('load', carregarLista);
 
-  // Excluir
-  q('#del-btn').addEventListener('click', async ()=>{
-    const code = q('#del-code').value.trim();
-    if (!code){ alert('Informe o slug para excluir.'); return; }
-    if (!confirm(`Excluir '${code}'?`)) return;
-    try{
-      const res = await fetch('/delete', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code })
-      });
-      const txt = await res.text();
-      if (!res.ok){ alert(txt); return; }
-      alert(txt);
-    }catch(e){ alert('Erro ao excluir: '+e.message); }
-  });
+// ------- EDIÇÃO -------
+async function abrirEdicao(code) {
+  editResult.textContent = '';
+  editCode.value = code;
+  editNewCode.value = '';
+  editUrls.value = '';
+  editWeights.value = '';
+  try {
+    const resp = await fetch(`/get/${code}`);
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    const urls = (data.type === 'single') ? [data.url] : (data.targets.map(t => t.url));
+    const weights = (data.type === 'single') ? [1] : (data.targets.map(t => t.weight || 1));
+    editUrls.value = urls.join('\\n');
+    editWeights.value = weights.join('\\n');
+    editModal.style.display = 'flex';
+  } catch (e) {
+    alert('Erro ao abrir edição: ' + e.message);
+  }
+}
+editCancel.addEventListener('click', () => {
+  editModal.style.display = 'none';
+});
+editSave.addEventListener('click', async () => {
+  editResult.textContent = 'Salvando...';
+  const code = editCode.value.trim();
+  const newCode = editNewCode.value.trim();
+  const urls = (editUrls.value || '').split('\\n').map(s=>s.trim()).filter(Boolean);
+  const weights = (editWeights.value || '').split('\\n').map(s=>s.trim()).filter(Boolean)
+                    .map(x => { const n = parseFloat(x); return (Number.isNaN(n) || n < 0) ? 1 : n; });
+  try {
+    const payload = { code, urls, weights };
+    if (newCode) payload.new_code = newCode;
+    const resp = await fetch('/update', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const txt = await resp.text();
+    if (!resp.ok) throw new Error(txt);
+    editResult.textContent = '✅ Alterações salvas: ' + txt;
+    await carregarLista();
+    setTimeout(()=>{ editModal.style.display='none'; }, 600);
+  } catch (e) {
+    editResult.textContent = 'Erro: ' + e.message;
+  }
+});
 
-  // Stats
-  q('#stats-btn').addEventListener('click', async ()=>{
-    const code = q('#stats-code').value.trim();
-    if (!code){ alert('Informe o código.'); return; }
-    try{
-      const res = await fetch('/stats/' + encodeURIComponent(code));
-      const txt = await res.text();
-      q('#stats-box').textContent = txt;
-      show(q('#stats-box'));
-    }catch(e){ alert('Erro ao obter stats: '+e.message); }
-  });
-
-  // Get JSON
-  q('#get-btn').addEventListener('click', async ()=>{
-    const code = q('#get-code').value.trim();
-    if (!code){ alert('Informe o código.'); return; }
-    try{
-      const res = await fetch('/get/' + encodeURIComponent(code));
-      const txt = await res.text();
-      q('#get-box').textContent = txt;
-      show(q('#get-box'));
-    }catch(e){ alert('Erro ao obter JSON: '+e.message); }
-  });
-})();
+// ------- EXCLUSÃO -------
+async function excluirLink(code) {
+  if (!confirm(`Excluir o link '${code}'? Esta ação não pode ser desfeita.`)) return;
+  try {
+    const resp = await fetch('/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ code })
+    });
+    const txt = await resp.text();
+    if (!resp.ok) throw new Error(txt);
+    alert('✅ Excluído: ' + code);
+    await carregarLista();
+  } catch (e) {
+    alert('Erro ao excluir: ' + e.message);
+  }
+}
 </script>
-</body>
 </html>
 """
+
 
 # -------------------- DB Pool & Schema (psycopg 3) --------------------
 if not DATABASE_URL:
