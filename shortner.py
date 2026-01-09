@@ -257,6 +257,35 @@ const editResult = document.getElementById('editResult');
 
 let waDestinos = []; // {url, phone, weight}
 
+// *** ALTERAÇÃO: função utilitária para formatar destinos (número para wa, URL para web)
+function formatarDestinoEChave(destino, tipoDestino) {
+  const tipo = String(tipoDestino || '').toLowerCase();
+  const isWhatsApp = tipo.includes('wa') || tipo.includes('what') || tipo.includes('whats') || destino.includes('wa.me/');
+  if (isWhatsApp) {
+    try {
+      // Extrai após "wa.me/"
+      const afterWaMe = destino.split('wa.me/')[1] || destino;
+      // Remove querystring
+      const pathOnly = afterWaMe.split('?')[0];
+      // Mantém apenas dígitos
+      const onlyDigits = (pathOnly.match(/\d+/g) || []).join('');
+      if (onlyDigits) {
+        return { textoDestino: onlyDigits, chaveHit: onlyDigits, tipo: 'wa' };
+      }
+    } catch (e) {}
+  }
+  return { textoDestino: destino, chaveHit: null, tipo: 'web' };
+}
+
+// *** ALTERAÇÃO (opcional e não invasiva): na lista de destinos WA durante a criação,
+// mostrar somente o número em vez da URL completa. (Se quiser manter URL, remova esta alteração.)
+function formatarNumeroDeWaUrl(url) {
+  const afterWaMe = url.split('wa.me/')[1] || url;
+  const pathOnly = afterWaMe.split('?')[0];
+  const onlyDigits = (pathOnly.match(/\d+/g) || []).join('');
+  return onlyDigits || url;
+}
+
 destType.addEventListener('change', () => {
   const v = destType.value;
   webForm.style.display = (v === 'web') ? '' : 'none';
@@ -294,7 +323,7 @@ function renderWaList() {
     const div = document.createElement('div');
     div.className = 'item';
     div.innerHTML = `
-      <div style="flex:1 1 300px"><code>${d.url}</code></div>
+      <div style="flex:1 1 300px"><code>${formatarNumeroDeWaUrl(d.url)}</code></div> <!-- *** ALTERAÇÃO: mostrar só o número -->
       <div class="row">
         <label class="small">Peso</label>
         <input class="weight" type="number" min="0" step="1" value="${d.weight}" />
@@ -336,9 +365,9 @@ createBtn.addEventListener('click', async () => {
 
     if (destType.value === 'web') {
       urls = (document.getElementById('webUrls').value || '')
-        .split('\\n').map(s=>s.trim()).filter(Boolean);
+        .split('\n').map(s=>s.trim()).filter(Boolean);
       const ws = (document.getElementById('webWeights').value || '')
-        .split('\\n').map(s=>s.trim()).filter(Boolean);
+        .split('\n').map(s=>s.trim()).filter(Boolean);
       weights = ws.map(x => {
         const n = parseFloat(x);
         return Number.isNaN(n) || n < 0 ? 1 : n;
@@ -359,24 +388,77 @@ createBtn.addEventListener('click', async () => {
   }
 });
 
+// *** ALTERAÇÃO: helpers para parse de /list a fim de extrair destinos e (se houver) hits por destino.
+function extrairParteDestinosDaLinha(linha) {
+  // Formatos possíveis:
+  // "CODE -> https://wa.me/551199... , https://site.com ... (hits: 12)"
+  // "CODE -> [https://wa.me/..., https://wa.me/...]" etc.
+  const setas = linha.split(' -> ');
+  if (setas.length < 2) return '';
+  // Remove o sufixo com "(hits: ...)" ou "(total hits: ...)" para sobrar apenas os destinos
+  const depois = setas.slice(1).join(' -> ');
+  return depois.replace(/\s*\(hits:\s*\d+\)\s*$/i, '')
+               .replace(/\s*\(total hits:\s*\d+\)\s*$/i, '')
+               .trim();
+}
+
+function separarDestinosBrutos(destinosStr) {
+  // Tenta separar por vírgula, ou por colchetes, ou por quebra de linha
+  let s = destinosStr.trim();
+  if (!s) return [];
+  // Remove colchetes se existirem
+  s = s.replace(/^\[/, '').replace(/\]$/, '');
+  // Divide por vírgula que separa URLs
+  const partes = s.split(/\s*,\s*/).map(x => x.trim()).filter(Boolean);
+  return partes;
+}
+
+// Se a API por acaso trouxer "URL (N)" com N = hits daquele destino, este parser pega.
+function extrairHitsDeDestinoParte(parte) {
+  const m = parte.match(/\((\d+)\)\s*$/);
+  return m ? parseInt(m[1], 10) : null;
+}
+function limparParteDestino(parte) {
+  // Remove " (N)" ao final e trim
+  return parte.replace(/\s*\(\d+\)\s*$/, '').trim();
+}
+
 async function carregarLista() {
   const resp = await fetch('/list');
   const text = await resp.text();
-  const linhas = text.split('\\n').filter(Boolean);
+  const linhas = text.split('\n').filter(Boolean);
   linksTableBody.innerHTML = '';
   for (const l of linhas) {
     const code = l.split(' -> ')[0].trim();
-    const hitsMatch = l.match(/\\(hits: (\\d+)\\)|\\(total hits: (\\d+)\\)/);
-    const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
+
+    // hits totais do link (comportamento original)
+    const hitsMatch = l.match(/\(hits:\s*(\d+)\)|\(total hits:\s*(\d+)\)/i);
+    const hitsTotal = hitsMatch ? (parseInt(hitsMatch[1] || hitsMatch[2],10)) : 0;
+
+    // *** ALTERAÇÃO: extrair e renderizar a coluna "Destinos"
+    const destinosStr = extrairParteDestinosDaLinha(l);
+    const destinosBrutos = separarDestinosBrutos(destinosStr);
+
+    // Monta HTML dos destinos com formatação (número para WhatsApp)
+    // e, se vier "(N)" ao lado da URL/wa no /list, mostra N ao lado.
+    const destinosFmt = destinosBrutos.map((parte) => {
+      const hitsPorDestino = extrairHitsDeDestinoParte(parte);
+      const urlLimpa = limparParteDestino(parte);
+      const fmt = formatarDestinoEChave(urlLimpa, urlLimpa.includes('wa.me/') ? 'wa' : 'web');
+      // Se houver hitsPorDestino, mostramos " · hits: N" ao lado do número/URL
+      const sufixoHits = (Number.isFinite(hitsPorDestino)) ? ` <span class="small">· hits: ${hitsPorDestino}</span>` : '';
+      return `<code>${fmt.textoDestino}</code>${sufixoHits}`;
+    });
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${l.replace(code + ' -> ', '')}</td>
-      <td>${hits}</td>
+      <td>${destinosFmt.length ? destinosFmt.join('<br>') : '-'}</td> <!-- *** ALTERAÇÃO: coluna "Destinos" formatada -->
+      <td>${hitsTotal}</td> <!-- mantém hits totais do link -->
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
-        /${code}Abrir</a>
-        /stats/${code}Stats</a>
+        ${location.origin}/${code}Abrir</a>
+        ${location.origin}/stats/${code}Stats</a>
         <button class="btn" onclick="abrirEdicao('${code}')">Editar</button>
         <button class="btn-danger" onclick="excluirLink('${code}')">Excluir</button>
       </td>
@@ -405,8 +487,8 @@ async function abrirEdicao(code) {
     const data = await resp.json();
     const urls = (data.type === 'single') ? [data.url] : (data.targets.map(t => t.url));
     const weights = (data.type === 'single') ? [1] : (data.targets.map(t => t.weight || 1));
-    editUrls.value = urls.join('\\n');
-    editWeights.value = weights.join('\\n');
+    editUrls.value = urls.join('\n');
+    editWeights.value = weights.join('\n');
     editModal.style.display = 'flex';
   } catch (e) {
     alert('Erro ao abrir edição: ' + e.message);
@@ -419,8 +501,8 @@ editSave.addEventListener('click', async () => {
   editResult.textContent = 'Salvando...';
   const code = editCode.value.trim();
   const newCode = editNewCode.value.trim();
-  const urls = (editUrls.value || '').split('\\n').map(s=>s.trim()).filter(Boolean);
-  const weights = (editWeights.value || '').split('\\n').map(s=>s.trim()).filter(Boolean)
+  const urls = (editUrls.value || '').split('\n').map(s=>s.trim()).filter(Boolean);
+  const weights = (editWeights.value || '').split('\n').map(s=>s.trim()).filter(Boolean)
                     .map(x => { const n = parseFloat(x); return (Number.isNaN(n) || n < 0) ? 1 : n; });
   try {
     const payload = { code, urls, weights };
@@ -458,6 +540,7 @@ async function excluirLink(code) {
   }
 }
 </script>
+
 </html>
 """
 
