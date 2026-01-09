@@ -294,7 +294,7 @@ function renderWaList() {
     const div = document.createElement('div');
     div.className = 'item';
     div.innerHTML = `
-      <div style="flex:1 1 300px"><code>${d.phone}</code></div>
+      <div style="flex:1 1 300px"><code>${d.url}</code></div>
       <div class="row">
         <label class="small">Peso</label>
         <input class="weight" type="number" min="0" step="1" value="${d.weight}" />
@@ -359,79 +359,25 @@ createBtn.addEventListener('click', async () => {
   }
 });
 
-
 async function carregarLista() {
   const resp = await fetch('/list');
   const text = await resp.text();
-  const linhas = text.split('\n').filter(Boolean);
+  const linhas = text.split('\\n').filter(Boolean);
   linksTableBody.innerHTML = '';
-
-  // helper: extrai dígitos de uma URL wa.me (DDI+número)
-  function waUrlToDigits(url) {
-    const after = url.split('wa.me/')[1] || url;
-    const pathOnly = after.split('?')[0];
-    const digits = (pathOnly.match(/\d+/g) || []).join('');
-    return digits || url;
-  }
-
-  // helper: monta HTML do destino + hits ao lado (se houver)
-  function destinoComHitsHtml(url, hitsDest) {
-    const isWa = url.includes('wa.me/');
-    const display = isWa ? waUrlToDigits(url) : url;
-    const hitsTag = Number.isFinite(hitsDest)
-      ? ` <span class="small">· hits: ${hitsDest}</span>`
-      : '';
-    return `<code>${display}</code>${hitsTag}`;
-  }
-
+  
   for (const l of linhas) {
     const code = l.split(' -> ')[0].trim();
-
-    // total de hits do link (mantém comportamento original)
-    const hitsMatch = l.match(/\(hits:\s*(\d+)\)|\(total hits:\s*(\d+)\)/i);
-    const hitsTotal = hitsMatch ? (parseInt(hitsMatch[1] || hitsMatch[2], 10)) : 0;
-
-    // parte após "->"
-    const depoisSeta = l.split(' -> ')[1] || '';
-    let destinosHtml = '-';
-
-    if (depoisSeta.startsWith('MULTI:')) {
-      // remove sufixo "(total hits: N)" e pega itens "url [w=.. hits=..]"
-      let parte = depoisSeta.slice('MULTI:'.length)
-        .replace(/\s*\(total hits:\s*\d+\)\s*$/i, '')
-        .trim();
-
-      // divide por vírgula
-      const itens = parte.split(/\s*,\s*/).filter(Boolean);
-
-      const linhasDestinos = itens.map(item => {
-        // captura URL e o número de hits dentro dos colchetes
-        const m = item.match(/^(https?:\/\/[^\s]+)\s*\[(.*?)\]$/i);
-        const url = m ? m[1] : item;
-        let hitsDest = null;
-        if (m && m[2]) {
-          const h = m[2].match(/hits\s*=\s*(\d+)/i);
-          if (h) hitsDest = parseInt(h[1], 10);
-        }
-        return destinoComHitsHtml(url, hitsDest);
-      });
-
-      destinosHtml = linhasDestinos.join('<br>');
-    } else if (depoisSeta) {
-      // SINGLE: "URL (hits: N)" — usamos N como hits do único destino
-      const url = depoisSeta.replace(/\s*\(hits:\s*\d+\)\s*$/i, '').trim();
-      destinosHtml = destinoComHitsHtml(url, hitsTotal);
-    }
-
+    const hitsMatch = l.match(/\\(hits: (\\d+)\\)|\\(total hits: (\\d+)\\)/);
+    const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${destinosHtml}</td>
-      <td>${hitsTotal}</td>
+      <td>${l.replace(code + ' -> ', '')}</td>
+      <td>${hits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
-        ${location.origin}/${code}Abrir</a>
-        ${location.origin}/stats/${code}Stats</a>
+        /${code}Abrir</a>
+        /stats/${code}Stats</a>
         <button class="btn" onclick="abrirEdicao('${code}')">Editar</button>
         <button class="btn-danger" onclick="excluirLink('${code}')">Excluir</button>
       </td>
@@ -440,6 +386,12 @@ async function carregarLista() {
   }
 }
 
+function copiar(txt) {
+  navigator.clipboard.writeText(txt).then(()=>alert('Link copiado: ' + txt));
+}
+
+refreshListBtn.addEventListener('click', carregarLista);
+window.addEventListener('load', carregarLista);
 
 // ------- EDIÇÃO -------
 async function abrirEdicao(code) {
