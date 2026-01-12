@@ -105,195 +105,6 @@ hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
 </style>
 </head>
 
-<script>
-/* ===== Utils para WhatsApp & MULTI ===== */
-function extrairNumeroDoWaMe(urlStr) {
-  let u;
-  try { u = new URL(urlStr); }
-  catch { u = new URL(urlStr, location.origin); }
-  if (u.hostname.toLowerCase() === 'wa.me') {
-    return u.pathname.replace(/\D/g, '');
-  }
-  const m = urlStr.match(/wa\.me\/(\d+)/i);
-  return m ? m[1] : '';
-}
-
-function limparTotalHits(multiStr) {
-  return multiStr.replace(/\s*\(total hits:\s*\d+\)\s*$/i, '').trim();
-}
-
-function parseMultiLinha(multiStr) {
-  const clean = limparTotalHits(multiStr);
-  const partes = clean.replace(/^MULTI:\s*/i, '').split(/\s*,\s*/);
-  const itens = [];
-  for (const p of partes) {
-    // "https://wa.me/55419...?text=... [w=33.0 hits=3]"
-    const urlMatch = p.match(/^\s*(\S+)\s+/);
-    const statsMatch = p.match(/\[w=([\d.]+)\s+hits=(\d+)\]/i);
-    if (!urlMatch || !statsMatch) continue;
-    const url = urlMatch[1];
-    const w = parseFloat(statsMatch[1]);
-    const hits = parseInt(statsMatch[2], 10);
-    const numero = extrairNumeroDoWaMe(url);
-    itens.push({ url, numero, w, hits });
-  }
-  return itens;
-}
-
-/* ===== Carregar lista (mantendo seu formato /list) ===== */
-async function carregarLista() {
-  const resp = await fetch('/list');
-  if (!resp.ok) throw new Error(await resp.text());
-
-  const text = await resp.text();
-  const linhas = text.split('\n').filter(Boolean);
-
-  const linksTableBody = document.getElementById('linksTableBody');
-  if (!linksTableBody) return;
-  linksTableBody.innerHTML = '';
-
-  for (const l of linhas) {
-    const code = l.split(' -> ')[0].trim();
-    const right = l.replace(`${code} -> `, '').trim();
-
-    const totalHitsMatch = l.match(/\(total hits:\s*(\d+)\)/i) || l.match(/\(hits:\s*(\d+)\)/i);
-    const totalHits = totalHitsMatch ? totalHitsMatch[1] : '0';
-
-    // Caso MULTI: mostra sublinhas por número com hits individuais
-    if (/^MULTI:/i.test(right)) {
-      const itens = parseMultiLinha(right); // [{url, numero, w, hits}, ...]
-
-      // Linha principal do code
-      const trHead = document.createElement('tr');
-      trHead.innerHTML = `
-        <td rowspan="${Math.max(1, itens.length + 1)}"><code>${code}</code></td>
-        <td colspan="2"><strong>MULTI</strong> — Total hits: ${totalHits}</td>
-        <td class="row">
-          copiarCopiar</button>
-          /${code}Abrir</a>
-          /stats/${code}Stats</a>
-          editarEditar</button>
-          excluirExcluir</button>
-        </td>
-      `;
-      linksTableBody.appendChild(trHead);
-
-      // Sublinhas: URL | Número | Hits (individuais)
-      for (const item of itens) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${item.url}</td>
-          <td>${item.numero || '-'}</td>
-          <td>${item.hits}</td>
-          <td class="row"></td>
-        `;
-        linksTableBody.appendChild(tr);
-      }
-      continue;
-    }
-
-    // Caso não-MULTI
-    const hitsMatch = l.match(/\(hits:\s*(\d+)\)/i);
-    const hitsOne = hitsMatch ? hitsMatch[1] : totalHits;
-
-    const urlSemHits = right.replace(/\s*\(hits:\s*\d+\)\s*$/i, '').trim();
-    const numeroWhats = extrairNumeroDoWaMe(urlSemHits);
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><code>${code}</code></td>
-      <td>${urlSemHits}</td>
-      <td>${hitsOne}</td>
-      <td class="row">
-        copiarCopiar</button>
-        /${code}Abrir</a>
-        /stats/${code}Stats</a>
-        <button class="btn" data-actionxcluirExcluir</button>
-      </td>
-    `;
-    linksTableBody.appendChild(tr);
-  }
-}
-
-/* ===== Delegação de eventos na tabela (não perde listeners ao recriar linhas) ===== */
-function initTabelaDelegation() {
-  const linksTableBody = document.getElementById('linksTableBody');
-  if (!linksTableBody) return;
-
-  linksTableBody.addEventListener('click', async (ev) => {
-    const btn = ev.target.closest('[data-action]');
-    if (!btn) return;
-
-    const action = btn.getAttribute('data-action');
-    const code = btn.getAttribute('data-code');
-
-    if (action === 'copiar' && code) {
-      const short = `${location.origin}/${code}`;
-      try {
-        await navigator.clipboard.writeText(short);
-        btn.textContent = 'Copiado!';
-        setTimeout(() => btn.textContent = 'Copiar', 1200);
-      } catch (e) {
-        alert('Falha ao copiar: ' + (e.message || e));
-      }
-    } else if (action === 'editar' && code) {
-      // Preserva suas funções globais, se já existem:
-      if (typeof abrirEdicao === 'function') abrirEdicao(code);
-    } else if (action === 'excluir' && code) {
-      if (typeof excluirLink === 'function') excluirLink(code);
-    }
-    // 'abrir' e 'stats' são <a href> e navegam sem JS.
-  });
-}
-
-/* ===== Listeners de botões fixos (ex.: Atualizar lista e Criar) ===== */
-function initFixedListeners() {
-  const btnAtualizar = document.getElementById('btnAtualizar');
-  if (btnAtualizar) {
-    btnAtualizar.addEventListener('click', (e) => {
-      e.preventDefault();
-      carregarLista().catch(err => alert(err.message || err));
-    });
-  }
-
-  const formCriar = document.getElementById('formCriar');
-  if (formCriar) {
-    formCriar.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const urlsTxt = formCriar.querySelector('[name="urls"]').value.trim();
-      const weightsTxt = formCriar.querySelector('[name="weights"]')?.value.trim() || '';
-      const code = formCriar.querySelector('[name="slug"]')?.value.trim() || '';
-
-      const urls = urlsTxt.split('\n').map(s => s.trim()).filter(Boolean);
-      const weights = weightsTxt ? weightsTxt.split('\n').map(s => parseFloat(s.trim())) : [];
-
-      try {
-        const payload = { urls, weights };
-        if (code) payload.code = code;
-        const resp = await fetch('/new', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload)
-        });
-        if (!resp.ok) throw new Error(await resp.text());
-        const short = await resp.text();
-        alert(`Criado: ${short}`);
-        await carregarLista();
-      } catch (err) {
-        alert(err.message || err);
-      }
-    });
-  }
-}
-
-/* ===== Inicialização segura ===== */
-document.addEventListener('DOMContentLoaded', () => {
-  initFixedListeners();
-  initTabelaDelegation();
-  carregarLista().catch(err => console.error(err));
-});
-</script>
-
 <body>
 <div class="container">
   <h1>EncCurtador • Painel</h1>
@@ -678,8 +489,6 @@ async function carregarLista() {
     linksTableBody.appendChild(tr);
   }
 }
-``
-
 
 function copiar(txt) {
   navigator.clipboard.writeText(txt).then(()=>alert('Link copiado: ' + txt));
@@ -753,6 +562,7 @@ async function excluirLink(code) {
     alert('Erro ao excluir: ' + e.message);
   }
 }
+
 </script>
 </html>
 """
