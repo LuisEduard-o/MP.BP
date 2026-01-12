@@ -67,7 +67,7 @@ INDEX_HTML = """<!doctype html>
 <html lang="pt-br">
 <head>
 <meta charset="utf-8">
-<title>Encurtador NOVO • Painel</</title>
+<title>EncCurtador • Painel</</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root { --bg:#0f172a; --card:#111827; --txt:#e5e7eb; --muted:#a1a1aa; --accent:#22c55e; --danger:#ef4444; }
@@ -360,32 +360,40 @@ createBtn.addEventListener('click', async () => {
 });
 
 
+
 function limparTotalHits(multiStr) {
+  // Remove o " (total hits: N)" do final, se existir
   return multiStr.replace(/\s*\(total hits:\s*\d+\)\s*$/i, '').trim();
 }
 
 function extrairNumeroDoWaMe(urlStr) {
+  // Tenta parser com URL; se vier sem protocolo, usa base
   let u;
   try {
     u = new URL(urlStr);
   } catch {
     u = new URL(urlStr, location.origin);
   }
+  // Para wa.me/NUMERO...
   if (u.hostname.toLowerCase() === 'wa.me') {
     return u.pathname.replace(/\D/g, ''); // só dígitos
   }
+  // Fallback: tenta regex direta no texto cru
   const m = urlStr.match(/wa\.me\/(\d+)/i);
   return m ? m[1] : '';
 }
 
 function parseMultiLinha(multiStr) {
   const clean = limparTotalHits(multiStr);
+  // Divide pelas vírgulas que separam cada link
   const partes = clean
     .replace(/^MULTI:\s*/i, '')
     .split(/\s*,\s*/);
 
   const itens = [];
   for (const p of partes) {
+    // Separa URL e bloco [w=.. hits=..]
+    // Ex.: "https://wa.me/55419...?... [w=33.0 hits=3]"
     const urlMatch = p.match(/^\s*(\S+)\s+/); // pega até o primeiro espaço antes do "["
     const statsMatch = p.match(/\[w=([\d.]+)\s+hits=(\d+)\]/i);
 
@@ -401,6 +409,9 @@ function parseMultiLinha(multiStr) {
   return itens;
 }
 
+
+
+
 async function carregarLista() {
   const resp = await fetch('/list');
   if (!resp.ok) throw new Error(await resp.text());
@@ -412,13 +423,17 @@ async function carregarLista() {
   for (const l of linhas) {
     const code = l.split(' -> ')[0].trim();
 
+    // Texto da direita (sem "code -> ")
     const right = l.replace(`${code} -> `, '').trim();
 
+    // Hits total (para o caso simples e também para o MULTI)
     const totalHitsMatch = l.match(/\(total hits:\s*(\d+)\)/i) || l.match(/\(hits:\s*(\d+)\)/i);
     const totalHits = totalHitsMatch ? totalHitsMatch[1] : '0';
 
+    // Caso MULTI: gera linhas por número
     if (/^MULTI:/i.test(right)) {
       const itens = parseMultiLinha(right); // [{url, numero, w, hits}, ...]
+      // Linha “cabeçalho” do code (mostra o total)
       const trHead = document.createElement('tr');
       trHead.innerHTML = `
         <td rowspan="${Math.max(1, itens.length + 1)}"><code>${code}</code></td>
@@ -433,6 +448,7 @@ async function carregarLista() {
       `;
       linksTableBody.appendChild(trHead);
 
+      // Sublinhas por número com seus hits
       for (const item of itens) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -443,14 +459,16 @@ async function carregarLista() {
         `;
         linksTableBody.appendChild(tr);
       }
-      continue;
+      continue; // passa para a próxima linha do /list
     }
 
+    // Caso NÃO-MULTI: linha normal
     const hitsMatch = l.match(/\(hits:\s*(\d+)\)/i);
     const hitsOne = hitsMatch ? hitsMatch[1] : totalHits;
 
     const tr = document.createElement('tr');
 
+    // URL sem o sufixo de hits
     const urlSemHits = right.replace(/\s*\(hits:\s*\d+\)\s*$/i, '').trim();
     const numeroWhats = extrairNumeroDoWaMe(urlSemHits);
 
@@ -470,7 +488,15 @@ async function carregarLista() {
     linksTableBody.appendChild(tr);
   }
 }
+``
 
+
+function copiar(txt) {
+  navigator.clipboard.writeText(txt).then(()=>alert('Link copiado: ' + txt));
+}
+
+refreshListBtn.addEventListener('click', carregarLista);
+window.addEventListener('load', carregarLista);
 
 // ------- EDIÇÃO -------
 async function abrirEdicao(code) {
