@@ -67,7 +67,7 @@ INDEX_HTML = """<!doctype html>
 <html lang="pt-br">
 <head>
 <meta charset="utf-8">
-<title>EncCurtador • Painel</</title>
+<title>Encurtador NOVO • Painel</</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root { --bg:#0f172a; --card:#111827; --txt:#e5e7eb; --muted:#a1a1aa; --accent:#22c55e; --danger:#ef4444; }
