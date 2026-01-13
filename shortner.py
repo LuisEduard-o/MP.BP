@@ -370,10 +370,13 @@ async function carregarLista() {
     const hitsMatch = l.match(/\\(hits: (\\d+)\\)|\\(total hits: (\\d+)\\)/);
     const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
     const tr = document.createElement('tr');
-    const texto = l.replace(code + ' -> ', '')
+    const texto = l.replace(code + ' -> ', '');
     const textoNovo = texto.replace(/https:\/\/\wa\.me\//gi, '');
-    const textoNovo1 = textoNovo.replace(/MULTI: /gi, '')
-    const textoNovo2 = textoNovo1.split(",")
+    const textoNovo2 = textoNovo1.replace(/ /g, '');
+    const textoNovo1 = textoNovo.replace(/MULTI: /gi, '');
+    const textoArray = textoNovo2.split(",");
+    arr.add("maça");
+    const resultado = textoArray.map(item => item.split("(")[0].trim())
 
     console.log(texto)
     console.log(textoNovo)
@@ -382,8 +385,8 @@ async function carregarLista() {
 
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${textoNovo2.map(linha => linha.substring(0, 13)).join('')}
-      ${textoNovo2.map(linha => linha.slice(-7, -1)).join('')}</td> 
+      <td>${resultado.map(linha => linha.substring(0, 12)).join('')}
+      ${resultado.map(linha => linha.slice(-7, -1)).join('')}</td>
       <td>${hits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
