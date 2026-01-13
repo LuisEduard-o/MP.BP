@@ -67,7 +67,7 @@ INDEX_HTML = """<!doctype html>
 <html lang="pt-br">
 <head>
 <meta charset="utf-8">
-<title>CODIGO NOVO</</title>
+<title>NOVO SITEEEE</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root { --bg:#0f172a; --card:#111827; --txt:#e5e7eb; --muted:#a1a1aa; --accent:#22c55e; --danger:#ef4444; }
@@ -104,7 +104,6 @@ hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 </style>
 </head>
-
 <body>
 <div class="container">
   <h1>EncCurtador • Painel</h1>
@@ -360,124 +359,21 @@ createBtn.addEventListener('click', async () => {
   }
 });
 
-
-
-function limparTotalHits(multiStr) {
-  // Remove o " (total hits: N)" do final, se existir
-  return multiStr.replace(/\s*\(total hits:\s*\d+\)\s*$/i, '').trim();
-}
-
-function extrairNumeroDoWaMe(urlStr) {
-  // Tenta parser com URL; se vier sem protocolo, usa base
-  let u;
-  try {
-    u = new URL(urlStr);
-  } catch {
-    u = new URL(urlStr, location.origin);
-  }
-  // Para wa.me/NUMERO...
-  if (u.hostname.toLowerCase() === 'wa.me') {
-    return u.pathname.replace(/\D/g, ''); // só dígitos
-  }
-  // Fallback: tenta regex direta no texto cru
-  const m = urlStr.match(/wa\.me\/(\d+)/i);
-  return m ? m[1] : '';
-}
-
-function parseMultiLinha(multiStr) {
-  const clean = limparTotalHits(multiStr);
-  // Divide pelas vírgulas que separam cada link
-  const partes = clean
-    .replace(/^MULTI:\s*/i, '')
-    .split(/\s*,\s*/);
-
-  const itens = [];
-  for (const p of partes) {
-    // Separa URL e bloco [w=.. hits=..]
-    // Ex.: "https://wa.me/55419...?... [w=33.0 hits=3]"
-    const urlMatch = p.match(/^\s*(\S+)\s+/); // pega até o primeiro espaço antes do "["
-    const statsMatch = p.match(/\[w=([\d.]+)\s+hits=(\d+)\]/i);
-
-    if (!urlMatch || !statsMatch) continue;
-
-    const url = urlMatch[1];
-    const w = parseFloat(statsMatch[1]);
-    const hits = parseInt(statsMatch[2], 10);
-    const numero = extrairNumeroDoWaMe(url);
-
-    itens.push({ url, numero, w, hits });
-  }
-  return itens;
-}
-
-
-
-
 async function carregarLista() {
   const resp = await fetch('/list');
-  if (!resp.ok) throw new Error(await resp.text());
-
   const text = await resp.text();
-  const linhas = text.split('\n').filter(Boolean);
+  const linhas = text.split('\\n').filter(Boolean);
   linksTableBody.innerHTML = '';
-
+  
   for (const l of linhas) {
     const code = l.split(' -> ')[0].trim();
-
-    // Texto da direita (sem "code -> ")
-    const right = l.replace(`${code} -> `, '').trim();
-
-    // Hits total (para o caso simples e também para o MULTI)
-    const totalHitsMatch = l.match(/\(total hits:\s*(\d+)\)/i) || l.match(/\(hits:\s*(\d+)\)/i);
-    const totalHits = totalHitsMatch ? totalHitsMatch[1] : '0';
-
-    // Caso MULTI: gera linhas por número
-    if (/^MULTI:/i.test(right)) {
-      const itens = parseMultiLinha(right); // [{url, numero, w, hits}, ...]
-      // Linha “cabeçalho” do code (mostra o total)
-      const trHead = document.createElement('tr');
-      trHead.innerHTML = `
-        <td rowspan="${Math.max(1, itens.length + 1)}"><code>${code}</code></td>
-        <td colspan="3"><strong>Destino MULTI</strong> — Total hits: ${totalHits}</td>
-        <td class="row">
-          <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
-          /${code}Abrir</a>
-          /stats/${code}Stats</a>
-          <button class="btn" onclick="abrirEdicao('${code}')">Editar</button>
-          <button class="btn-danger" onclick="excluirLink('${code}')">Excluir</button>
-        </td>
-      `;
-      linksTableBody.appendChild(trHead);
-
-      // Sublinhas por número com seus hits
-      for (const item of itens) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${item.url}</td>
-          <td>${item.hits}</td>
-          <td><strong>${item.numero || '-'}</strong></td>
-          <td class="row"></td>
-        `;
-        linksTableBody.appendChild(tr);
-      }
-      continue; // passa para a próxima linha do /list
-    }
-
-    // Caso NÃO-MULTI: linha normal
-    const hitsMatch = l.match(/\(hits:\s*(\d+)\)/i);
-    const hitsOne = hitsMatch ? hitsMatch[1] : totalHits;
-
+    const hitsMatch = l.match(/\\(hits: (\\d+)\\)|\\(total hits: (\\d+)\\)/);
+    const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
     const tr = document.createElement('tr');
-
-    // URL sem o sufixo de hits
-    const urlSemHits = right.replace(/\s*\(hits:\s*\d+\)\s*$/i, '').trim();
-    const numeroWhats = extrairNumeroDoWaMe(urlSemHits);
-
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${urlSemHits}</td>
-      <td>${hitsOne}</td>
-      <td>${numeroWhats ? `<strong>${numeroWhats}</strong>` : '-'}</td>
+      <td>${l.replace(code + ' -> ', '')}</td>
+      <td>${hits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
         /${code}Abrir</a>
@@ -562,7 +458,6 @@ async function excluirLink(code) {
     alert('Erro ao excluir: ' + e.message);
   }
 }
-
 </script>
 </html>
 """
