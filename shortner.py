@@ -67,7 +67,7 @@ INDEX_HTML = """<!doctype html>
 <html lang="pt-br">
 <head>
 <meta charset="utf-8">
-<title>NVO DE NOVO</title>
+<title>EncCurtador • Painel</</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root { --bg:#0f172a; --card:#111827; --txt:#e5e7eb; --muted:#a1a1aa; --accent:#22c55e; --danger:#ef4444; }
@@ -371,8 +371,8 @@ async function carregarLista() {
     const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
     const tr = document.createElement('tr');
     const texto = l.replace(code + ' -> ', '')
-    const textoNovo = texto.replace("https://wa.me/", '')
-    const textoNovo1 = textoNovo.replace("MULTI:", '')
+    const textoNovo = texto.replace(/https://wa.me//gi, '') 
+    const textoNovo1 = textoNovo.replace("MULTI: ", '')
     const textoNovo2 = textoNovo.split(",")
 
     console.log(texto)
