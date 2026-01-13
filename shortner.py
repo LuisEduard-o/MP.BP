@@ -421,6 +421,12 @@ function copiar(txt) {
 refreshListBtn.addEventListener('click', carregarLista);
 window.addEventListener('load', carregarLista);
 
+async function logout() {
+  await fetch('/logout', { method: 'POST' });
+  location.href = '/login';
+}
+
+
 // ------- EDIÇÃO -------
 async function abrirEdicao(code) {
   editResult.textContent = '';
@@ -890,6 +896,13 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.lstrip("/")
 
+        
+        if path == "login":
+            if self.current_user():
+                return self.redirect("/")
+            return self.respond_html(LOGIN_HTML)
+
+
         # Página de login (pública). Se já logado, manda pro painel.
         if path == "login":
             if self.current_user():
@@ -1025,7 +1038,6 @@ class ShortenerHandler(http.server.SimpleHTTPRequestHandler):
                     )
                 conn.commit()
             return self.respond_text(f"Usuário {user} criado com sucesso!")
-
 
         if path == "login":
             user = payload.get("user", "")
