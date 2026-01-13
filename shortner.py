@@ -371,11 +371,21 @@ async function carregarLista() {
     const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
     const tr = document.createElement('tr');
     const texto = l.replace(code + ' -> ', '');
-    const textoNovo = texto.replace(/https:\/\/\wa\.me\//gi, '');
+    const textoNovo = texto.replace(/https:\/\/wa\.me\//gi, '');
     const textoNovo1 = textoNovo.replace(/MULTI: /gi, '');
     const textoNovo2 = textoNovo1.replace(/ /g, '');
     const textoArray = textoNovo2.split(",");
-    const resultado = textoArray.map(item => item.split("(")[0].trim())
+    const resultado = textoArray.map(item => item.split('(')[0].trim());
+    
+    const arrayNumeros = resultado.map(linha => {
+      const m = linha.match(/wa\.me\/(\d+)/i) || linha.match(/(\d{10,15})/);
+      return m ? m[1] : '';
+    });
+
+    const arrayHits = textoArray.map(item => {
+      const m = item.match(/hits\s*[:=]\s*(\d+)/i);
+      return m ? m[1] : '0';
+    });
 
     console.log(texto)
     console.log(textoNovo)
@@ -384,8 +394,7 @@ async function carregarLista() {
 
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${resultado.map(linha => linha.substring(0, 12)).join(' | ')}
-      ${resultado.map(linha => linha.slice(-7, -1)).join(' | ')}</td>
+      <td>${arrayNumeros.map((num, i) => `<p>${num} ${arrayHits[i] || '0'}</p>`).join('')}</td>
       <td>${hits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
