@@ -394,7 +394,7 @@ async function carregarLista() {
 
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${arrayNumeros.map((num, i) => `<p>${num} ${arrayHits[i] || '0'}</p>`).join('')}</td>
+      <td>${arrayNumeros.map((num, i) => `<p>${num} Hits = ${arrayHits[i] || '0'}</p>`).join('')}</td>
       <td>${hits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
