@@ -77,166 +77,331 @@ INDEX_HTML = """
 <!doctype html>
 <html lang="pt-br">
 <head>
-<meta charset="utf-8" />
-<title>Encurtador • Painel</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="utf-8">
+<title>Encurtador • Painel</</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-  h2 { margin-top: 24px; }
-  input, textarea, select, button { padding: 8px; margin: 4px 0; width: 100%; max-width: 680px; }
-  .row { display:flex; gap:8px; flex-wrap: wrap; align-items:center; }
-  .btn { padding: 8px 12px; cursor:pointer; border:1px solid #ccc; background:#f7f7f7; border-radius:6px; }
-  .btn-danger { padding: 8px 12px; cursor:pointer; border:1px solid #e66; background:#ffe5e5; border-radius:6px; }
-  table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-  th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
-  code { background: #f2f2f2; padding: 2px 4px; border-radius: 4px; }
-  .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+:root { --bg:#0f172a; --card:#111827; --txt:#e5e7eb; --muted:#a1a1aa; --accent:#22c55e; --danger:#ef4444; }
+*{box-sizing:border-box} body{margin:0;background:#0b1022;color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu}
+.container{max-width:1024px;margin:32px auto;padding:0 16px}
+h1{font-size:1.6rem;margin:0 0 16px}
+.card{background:var(--card);padding:16px;border-radius:12px;border:1px solid #1f2937}
+.grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:1fr 1fr}
+label{display:block;font-size:.9rem;margin-bottom:6px;color:#cbd5e1}
+input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #334155;background:#0b1220;color:var(--txt)}
+input[type="number"]{width:100%}
+textarea{min-height:80px}
+button{padding:10px 14px;border:none;border-radius:8px;cursor:pointer}
+.btn{background:#334155;color:#fff}
+.btn-primary{background:var(--accent);color:#00150c;font-weight:600}
+.btn-danger{background:var(--danger);color:#fff}
+.small{font-size:.85rem;color:var(--muted)}
+.table{width:100%;border-collapse:collapse;margin-top:12px}
+.table th,.table td{border-bottom:1px solid #1f2937;padding:8px;text-align:left;font-size:.92rem}
+.row{display:flex;gap:8px;align-items:center}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.8rem;background:#1f2937;color:#cbd5e1}
+code{background:#0b1220;padding:2px 6px;border-radius:6px;border:1px solid #1f2937}
+footer{margin-top:24px;color:#94a3b8}
+hr{border:none;border-top:1px solid #1f2937;margin:16px 0}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#0b1220;padding:8px;border-radius:8px;border:1px solid #1f2937}
+.item code{max-width:100%;overflow:auto}
+.weight{max-width:120px}
+.remove{background:#ef4444}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center}
+.modal-content{background:var(--card);padding:16px;border-radius:12px;max-width:900px;width:95%;border:1px solid #1f2937}
+.modal-title{font-size:1.2rem;margin:0 0 10px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 </style>
 </head>
 <body>
-  <div class="topbar">
-    <h1>Encurtador • Painel</h1>
-    <button class="btn" onclick="logout()">Sair</button>
+<div class="container">
+  <h1>Encurtador • Painel</h1>
+
+  <div class="card">
+    <h2 style="margin-top:0">Criar link curto</h2>
+    <div class="grid grid-2">
+      <div>
+        <label>Slug (opcional)</label>
+        <input id="slugCode" placeholder="ex.: PromocaoMercadoPago/Whats" />
+        <div class="small">Apenas letras, números e hífen por segmento. Ex.: <code>PromocaoMercadoPago/Whats</code>.</div>
+      </div>
+      <div class="row" style="align-items:flex-end">
+        <label class="badge">Tipo de destino</label>
+        <select id="destType">
+          <option value="web">Web (URL)</option>
+          <option value="wa">WhatsApp (wa.me)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- WEB FORM -->
+    <div id="webForm" class="grid" style="margin-top:10px">
+      <div>
+        <label>URLs (uma por linha)</label>
+        <textarea id="webUrls" placeholder="https://site1.com\nhttps://site2.com"></textarea>
+        <div class="small">Todas devem começar com <code>http://</code> ou <code>https://</code>.</div>
+      </div>
+      <div>
+        <label>Pesos (opcional, uma por linha na mesma ordem)</label>
+        <textarea id="webWeights" placeholder="50\n30\n20"></textarea>
+        <div class="small">Se vazio, peso = 1 para todos.</div>
+      </div>
+    </div>
+
+    <!-- WHATSAPP FORM -->
+    <div id="waForm" class="grid" style="display:none;margin-top:10px">
+      <div class="grid grid-2">
+        <div>
+          <label>DDI</label>
+          <input id="waDdi" value="55" />
+        </div>
+        <div>
+          <label>Número (somente dígitos)</label>
+          <input id="waNumber" placeholder="41999998888" />
+        </div>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label>Mensagem</label>
+          <textarea id="waMsg" placeholder="Olá! Quero aproveitar a promoção."></textarea>
+        </div>
+        <div>
+          <label>Peso do destino</label>
+          <input id="waWeight" type="number" min="0" step="1" value="1" />
+          <div class="small">Peso 0 = nunca selecionado; valores maiores aumentam a chance.</div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn" id="addWa">Adicionar destino WhatsApp</button>
+        <span class="small">Adicione quantos números quiser. Cada um tem seu próprio peso.</span>
+      </div>
+      <div id="waList" class="list" style="margin-top:10px"></div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="btn-primary" id="createBtn">Criar link curto</button>
+      <span id="createResult" class="small"></span>
+    </div>
   </div>
 
-  <h2>Criar link curto</h2>
-  <div class="row">
-    <label>Slug (opcional)</label>
-    <input id="slug" placeholder="PromocaoMercadoPago/Whats" />
+  <div class="card" style="margin-top:16px">
+    <h2 style="margin-top:0">Links criados</h2>
+    <table class="table" id="linksTable">
+      <thead>
+        <tr><th>Código</th><th>Destinos</th><th>Hits</th><th>Ações</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="row">
+      <button class="btn" id="refreshList">Atualizar lista</button>
+    </div>
   </div>
 
-  <div class="row">
-    <label>Tipo de destino</label>
-    <select id="tipo">
-      <option value="web">Web (URL)</option>
-      <option value="wa">WhatsApp (wa.me)</option>
-    </select>
+  <!-- MODAL DE EDIÇÃO -->
+  <div class="modal" id="editModal">
+    <div class="modal-content">
+      <h3 class="modal-title">Editar link</h3>
+      <div class="grid grid-2">
+        <div>
+          <label>Slug atual</label>
+          <input id="editCode" readonly />
+          <div class="small">Este é o código atual do link.</div>
+        </div>
+        <div>
+          <label>Novo slug (opcional)</label>
+          <input id="editNewCode" placeholder="ex.: Suporte/Whats" />
+          <div class="small">Deixe em branco para manter o atual.</div>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label>URLs (uma por linha)</label>
+          <textarea id="editUrls"></textarea>
+          <div class="small">Ex.: <code>https://wa.me/5541999998888?text=...</code> ou <code>https://site.com</code></div>
+        </div>
+        <div>
+          <label>Pesos (uma por linha na mesma ordem das URLs)</label>
+          <textarea id="editWeights"></textarea>
+          <div class="small">Se vazio, peso = 1 para todos. Valores negativos viram 0.</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="editCancel">Cancelar</button>
+        <button class="btn-primary" id="editSave">Salvar alterações</button>
+      </div>
+      <div class="small" id="editResult"></div>
+    </div>
   </div>
 
-  <div class="row">
-    <label>URLs (uma por linha)</label>
-    <textarea id="urls" rows="4" placeholder="https://exemplo.com\nhttps://outro.com"></textarea>
-  </div>
-
-  <div class="row">
-    <label>Pesos (opcional, na mesma ordem)</label>
-    <textarea id="weights" rows="3" placeholder="1\n3\n2"></textarea>
-  </div>
-
-  <div class="row">
-    <button class="btn" onclick="criar()">Criar link curto</button>
-  </div>
-
-  <h2>Links criados</h2>
-  <div class="row">
-    <button class="btn" onclick="carregarLista()">Atualizar lista</button>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Código</th>
-        <th>Destinos</th>
-        <th>Hits</th>
-        <th>Ações</th>
-      </tr>
-    </thead>
-    <tbody id="linksTableBody"></tbody>
-  </table>
-
-  <h3>Editar link</h3>
-  <div class="row">
-    <label>Slug atual</label>
-    <input id="editCode" placeholder="código atual" />
-  </div>
-  <div class="row">
-    <label>Novo slug (opcional)</label>
-    <input id="newCode" placeholder="novo código (opcional)" />
-  </div>
-  <div class="row">
-    <label>URLs (uma por linha)</label>
-    <textarea id="editUrls" rows="4" placeholder="https://wa.me/5541999998888?text=..."></textarea>
-  </div>
-  <div class="row">
-    <label>Pesos (uma por linha)</label>
-    <textarea id="editWeights" rows="3" placeholder="1\n2\n1"></textarea>
-  </div>
-  <div class="row">
-    <button class="btn" onclick="salvarEdicao()">Salvar alterações</button>
-  </div>
+  <footer>
+    <div>Servidor local. Para compartilhar publicamente, faça deploy (Render/Railway/Heroku).</div>
+  </footer>
+</div>
 
 <script>
-async function logout() {
-  try {
-    await fetch('/logout', { method: 'POST' });
-  } catch (e) {}
-  location.href = '/login';
+const destType = document.getElementById('destType');
+const webForm = document.getElementById('webForm');
+const waForm = document.getElementById('waForm');
+const waDdi = document.getElementById('waDdi');
+const waNumber = document.getElementById('waNumber');
+const waMsg = document.getElementById('waMsg');
+const waWeight = document.getElementById('waWeight');
+const waList = document.getElementById('waList');
+const addWa = document.getElementById('addWa');
+const createBtn = document.getElementById('createBtn');
+const createResult = document.getElementById('createResult');
+const linksTableBody = document.querySelector('#linksTable tbody');
+const refreshListBtn = document.getElementById('refreshList');
+const slugCode = document.getElementById('slugCode');
+
+// Modal edição
+const editModal = document.getElementById('editModal');
+const editCode = document.getElementById('editCode');
+const editNewCode = document.getElementById('editNewCode');
+const editUrls = document.getElementById('editUrls');
+const editWeights = document.getElementById('editWeights');
+const editCancel = document.getElementById('editCancel');
+const editSave = document.getElementById('editSave');
+const editResult = document.getElementById('editResult');
+
+let waDestinos = []; // {url, phone, weight}
+
+destType.addEventListener('change', () => {
+  const v = destType.value;
+  webForm.style.display = (v === 'web') ? '' : 'none';
+  waForm.style.display = (v === 'wa') ? '' : 'none';
+});
+
+addWa.addEventListener('click', () => {
+  const ddiClean = (waDdi.value || '').trim().replace(/[^0-9]/g,'');   // só dígitos
+  const num = (waNumber.value || '').trim().replace(/[^0-9]/g,'');
+  const msgText = (waMsg.value || '').trim();
+  let w = parseFloat(waWeight.value);
+
+  if (!ddiClean || !num) {
+    alert('Informe DDI e número (apenas dígitos).');
+    return;
+  }
+  if (Number.isNaN(w) || w < 0) w = 1;
+
+  // wa.me exige número internacional sem '+', sem espaços/traços
+  const phone = `${ddiClean}${num}`;
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(msgText)}`;
+
+  waDestinos.push({url, phone, weight: w});
+  renderWaList();
+  waNumber.value = '';
+});
+
+function renderWaList() {
+  waList.innerHTML = '';
+  if (waDestinos.length === 0) {
+    waList.innerHTML = '<div class="small">Nenhum destino WhatsApp adicionado.</div>';
+    return;
+  }
+  waDestinos.forEach((d,i)=>{
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = `
+      <div style="flex:1 1 300px"><code>${d.url}</code></div>
+      <div class="row">
+        <label class="small">Peso</label>
+        <input class="weight" type="number" min="0" step="1" value="${d.weight}" />
+        <button class="btn-danger remove">Remover</button>
+      </div>
+    `;
+    const weightInput = div.querySelector('.weight');
+    weightInput.addEventListener('change', () => {
+      let v = parseFloat(weightInput.value);
+      if (Number.isNaN(v) || v < 0) v = 0;
+      waDestinos[i].weight = v;
+    });
+    const removeBtn = div.querySelector('.remove');
+    removeBtn.addEventListener('click', () => {
+      waDestinos.splice(i,1);
+      renderWaList();
+    });
+    waList.appendChild(div);
+  });
 }
 
-async function criar() {
-  const slug = document.getElementById('slug').value.trim();
-  const tipo = document.getElementById('tipo').value;
-  let urls = document.getElementById('urls').value.split('\\n').map(s => s.trim()).filter(Boolean);
-  const weights = document.getElementById('weights').value.split('\\n').map(s => s.trim()).filter(Boolean).map(Number);
-
-  if (tipo === 'wa') {
-    // aceita linhas como "https://wa.me/55DDDNÚMERO?text=..."
-    urls = urls.map(u => u.startsWith('http') ? u : 'https://wa.me/' + u);
-  }
-
+async function criarLinkCurto(urls, weights, code) {
   const payload = { urls, weights };
-  if (slug) payload.code = slug;
-
-  const r = await fetch('/new', {
+  if (code && code.trim()) payload.code = code.trim();
+  const resp = await fetch('/new', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload)
   });
-  const t = await r.text();
-  if (!r.ok) { alert(t); return; }
-  alert('Criado: ' + t);
-  carregarLista();
+  if (!resp.ok) throw new Error(await resp.text());
+  return await resp.text();
 }
 
-async function carregarLista() {
-  const r = await fetch('/list');
-  const text = await r.text();
-  if (!r.ok) {
-    alert(text || 'Erro ao carregar lista');
-    if (r.status === 401 || r.status === 403) location.href = '/login';
-    return;
-  }
-  const linhas = text.split('\\n').filter(Boolean);
-  const linksTableBody = document.getElementById('linksTableBody');
-  linksTableBody.innerHTML = '';
+createBtn.addEventListener('click', async () => {
+  createResult.textContent = 'Criando...';
+  try {
+    let urls = [], weights = [];
+    const code = slugCode.value || '';
 
+    if (destType.value === 'web') {
+      urls = (document.getElementById('webUrls').value || '')
+        .split('\\n').map(s=>s.trim()).filter(Boolean);
+      const ws = (document.getElementById('webWeights').value || '')
+        .split('\\n').map(s=>s.trim()).filter(Boolean);
+      weights = ws.map(x => {
+        const n = parseFloat(x);
+        return Number.isNaN(n) || n < 0 ? 1 : n;
+      });
+    } else {
+      if (!waDestinos.length) throw new Error('Adicione ao menos um número de WhatsApp.');
+      urls = waDestinos.map(d => d.url);
+      weights = waDestinos.map(d => (Number.isFinite(d.weight) && d.weight >= 0) ? d.weight : 1);
+    }
+
+    const short = await criarLinkCurto(urls, weights, code);
+    createResult.innerHTML = `✅ Criado: ${short}${short}</a>`;
+    if (destType.value === 'wa') { waDestinos = []; renderWaList(); waWeight.value='1'; }
+    slugCode.value = '';
+    await carregarLista();
+  } catch (e) {
+    createResult.textContent = 'Erro: ' + e.message;
+  }
+});
+
+async function carregarLista() {
+  const resp = await fetch('/list');
+  const text = await resp.text();
+  const linhas = text.split('\\n').filter(Boolean);
+  linksTableBody.innerHTML = '';
+  
   for (const l of linhas) {
     const code = l.split(' -> ')[0].trim();
-
-    const totalHitsMatch = l.match(/(?:total\\s*)?hits\\s*[:=]\\s*(\\d+)/i);
-    const hitsTotal = totalHitsMatch ? totalHitsMatch[1] : '0';
-
-    const texto = l.replace(code + ' -> ', '');
-    const semMulti = texto.replace(/^\\s*MULTI:\\s*/i, '');
-    const itens = semMulti.split(',').map(s => s.trim()).filter(Boolean);
-
-    const pares = itens.map(str => {
-      const numeroMatch = str.match(/wa\\.me\\/(\\d+)/i);
-      const numero = numeroMatch ? numeroMatch[1] : '';
-
-      const hitsMatch = str.match(/hits\\s*[:=]\\s*(\\d+)/i);
-      const hits = hitsMatch ? hitsMatch[1] : '0';
-
-      return { numero, hits };
-    }).filter(p => p.numero);
-
-    const listaNumeroHitsHTML = pares.map(p => `<p>${p.numero} HITS = ${p.hits}</p>`).join('');
-
+    const hitsMatch = l.match(/\\(hits: (\\d+)\\)|\\(total hits: (\\d+)\\)/);
+    const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
     const tr = document.createElement('tr');
+    const texto = l.replace(code + ' -> ', '');
+    const textoNovo = texto.replace(/https:\/\/wa\.me\//gi, '');
+    const textoNovo1 = textoNovo.replace(/MULTI: /gi, '');
+    const textoNovo2 = textoNovo1.replace(/ /g, '');
+    const textoArray = textoNovo2.split(",");
+    const resultado = textoArray.map(item => item.split('(')[0].trim());
+    
+    const arrayNumeros = resultado.map(linha => {
+      const m = linha.match(/wa\.me\/(\d+)/i) || linha.match(/(\d{10,15})/);
+      return m ? m[1] : '';
+    });
+
+    const arrayHits = textoArray.map(item => {
+      const m = item.match(/hits\s*[:=]\s*(\d+)/i);
+      return m ? m[1] : '0';  
+    });
+    const totalHits = arrayHitsNumero.reduce((acc, n) => acc + n, 0);
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${listaNumeroHitsHTML}</td>
-      <td>${hitsTotal}</td>
+      <td>${arrayNumeros.map((num, i) => `<p>${num} Hits = ${arrayHits[i] || '0'}</p>`).join('')}</td>
+      <td>${totalHits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
         /${code}Abrir</a>
@@ -249,41 +414,79 @@ async function carregarLista() {
   }
 }
 
-async function copiar(texto) {
-  try { await navigator.clipboard.writeText(texto); alert('Copiado!'); }
-  catch { alert('Falha ao copiar'); }
+function copiar(txt) {
+  navigator.clipboard.writeText(txt).then(()=>alert('Link copiado: ' + txt));
 }
 
-function abrirEdicao(code) { document.getElementById('editCode').value = code; }
-
-async function salvarEdicao() {
-  const code = document.getElementById('editCode').value.trim();
-  const new_code = document.getElementById('newCode').value.trim();
-  const urls = document.getElementById('editUrls').value.split('\\n').map(s => s.trim()).filter(Boolean);
-  const weights = document.getElementById('editWeights').value.split('\\n').map(s => s.trim()).filter(Boolean).map(Number);
-
-  const r = await fetch('/update', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ code, new_code, urls, weights })
-  });
-  const t = await r.text();
-  if (!r.ok) { alert(t); return; }
-  alert('Atualizado: ' + t);
-  carregarLista();
-}
-
-async function excluirLink(code) {
-  if (!confirm('Excluir ' + code + '?')) return;
-  const r = await fetch('/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code}) });
-  const t = await r.text();
-  if (!r.ok) { alert(t); return; }
-  alert(t);
-  carregarLista();
-}
-
+refreshListBtn.addEventListener('click', carregarLista);
 window.addEventListener('load', carregarLista);
+
+// ------- EDIÇÃO -------
+async function abrirEdicao(code) {
+  editResult.textContent = '';
+  editCode.value = code;
+  editNewCode.value = '';
+  editUrls.value = '';
+  editWeights.value = '';
+  try {
+    const resp = await fetch(`/get/${code}`);
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    const urls = (data.type === 'single') ? [data.url] : (data.targets.map(t => t.url));
+    const weights = (data.type === 'single') ? [1] : (data.targets.map(t => t.weight || 1));
+    editUrls.value = urls.join('\\n');
+    editWeights.value = weights.join('\\n');
+    editModal.style.display = 'flex';
+  } catch (e) {
+    alert('Erro ao abrir edição: ' + e.message);
+  }
+}
+editCancel.addEventListener('click', () => {
+  editModal.style.display = 'none';
+});
+editSave.addEventListener('click', async () => {
+  editResult.textContent = 'Salvando...';
+  const code = editCode.value.trim();
+  const newCode = editNewCode.value.trim();
+  const urls = (editUrls.value || '').split('\\n').map(s=>s.trim()).filter(Boolean);
+  const weights = (editWeights.value || '').split('\\n').map(s=>s.trim()).filter(Boolean)
+                    .map(x => { const n = parseFloat(x); return (Number.isNaN(n) || n < 0) ? 1 : n; });
+  try {
+    const payload = { code, urls, weights };
+    if (newCode) payload.new_code = newCode;
+    const resp = await fetch('/update', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const txt = await resp.text();
+    if (!resp.ok) throw new Error(txt);
+    editResult.textContent = '✅ Alterações salvas: ' + txt;
+    await carregarLista();
+    setTimeout(()=>{ editModal.style.display='none'; }, 600);
+  } catch (e) {
+    editResult.textContent = 'Erro: ' + e.message;
+  }
+});
+
+// ------- EXCLUSÃO -------
+async function excluirLink(code) {
+  if (!confirm(`Excluir o link '${code}'? Esta ação não pode ser desfeita.`)) return;
+  try {
+    const resp = await fetch('/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ code })
+    });
+    const txt = await resp.text();
+    if (!resp.ok) throw new Error(txt);
+    alert('✅ Excluído: ' + code);
+    await carregarLista();
+  } catch (e) {
+    alert('Erro ao excluir: ' + e.message);
+  }
+}
 </script>
-</body>
 </html>
 """
 
