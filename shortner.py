@@ -372,8 +372,8 @@ async function carregarLista() {
     const tr = document.createElement('tr');
     const texto = l.replace(code + ' -> ', '');
     const textoNovo = texto.replace(/https:\/\/\wa\.me\//gi, '');
-    const textoNovo2 = textoNovo1.replace(/ /g, '');
     const textoNovo1 = textoNovo.replace(/MULTI: /gi, '');
+    const textoNovo2 = textoNovo1.replace(/ /g, '');
     const textoArray = textoNovo2.split(",");
     arr.add("maça");
     const resultado = textoArray.map(item => item.split("(")[0].trim())
