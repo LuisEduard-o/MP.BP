@@ -371,8 +371,8 @@ async function carregarLista() {
     const hits = hitsMatch ? (hitsMatch[1] || hitsMatch[2]) : '0';
     const tr = document.createElement('tr');
     const texto = l.replace(code + ' -> ', '')
-    const textoNovo = texto.replace(/https://wa.me//gi, '') 
-    const textoNovo1 = textoNovo.replace("MULTI: ", '')
+    const textoNovo = texto.replace(/https:\/\/\wa\.me\//gi, '');
+    const textoNovo1 = textoNovo.replace(/MULTI: /gi, '')
     const textoNovo2 = textoNovo.split(",")
 
     console.log(texto)
