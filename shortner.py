@@ -384,8 +384,8 @@ async function carregarLista() {
 
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${resultado.map(linha => linha.substring(0, 12)).join('')}
-      ${resultado.map(linha => linha.slice(-7, -1)).join('')}</td>
+      <td>${resultado.map(linha => linha.substring(0, 12)).join(' | ')}
+      ${resultado.map(linha => linha.slice(-7, -1)).join(' | ')}</td>
       <td>${hits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
