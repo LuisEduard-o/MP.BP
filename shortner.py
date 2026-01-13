@@ -373,7 +373,7 @@ async function carregarLista() {
     const texto = l.replace(code + ' -> ', '')
     const textoNovo = texto.replace(/https:\/\/\wa\.me\//gi, '');
     const textoNovo1 = textoNovo.replace(/MULTI: /gi, '')
-    const textoNovo2 = textoNovo.split(",")
+    const textoNovo2 = textoNovo1.split(",")
 
     console.log(texto)
     console.log(textoNovo)
@@ -382,7 +382,8 @@ async function carregarLista() {
 
     tr.innerHTML = `
       <td><code>${code}</code></td>
-      <td>${textoNovo2.map(linha => linha.substring(0, 13)).join('')}</td> 
+      <td>${textoNovo2.map(linha => linha.substring(0, 13)).join('')}
+      ${textoNovo2.map(linha => linha.slice(-7, -1)).join('')}</td> 
       <td>${hits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
