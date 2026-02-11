@@ -413,8 +413,6 @@ async function carregarLista() {
       <td>${totalHits}</td>
       <td class="row">
         <button class="btn" onclick="copiar('${location.origin}/${code}')">Copiar</button>
-        <a href="/${code}" target="_blank">Abrir</a>
-        <a href="/stats/${code}" target="_blank">Stats</a>
         <button class="btn" onclick="abrirEdicao('${code}')">Editar</button>
         <button class="btn-danger" onclick="excluirLink('${code}')">Excluir</button>
       </td>
