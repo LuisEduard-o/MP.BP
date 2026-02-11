@@ -403,6 +403,9 @@ async function carregarLista() {
       const m = item.match(/hits\s*[:=]\s*(\d+)/i);
       return m ? m[1] : '0';  
     });
+
+    const arrayHitsNumero = arrayHits.map(h => parseInt(h, 10) || 0);
+    
     const totalHits = arrayHitsNumero.reduce((acc, n) => acc + n, 0);
     tr.innerHTML = `
       <td><code>${code}</code></td>
